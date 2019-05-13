@@ -26,6 +26,7 @@
  */
 
 #include <sse-imgui/sse-imgui.h>
+#include <sse-gui/sse-gui.h>
 #include <utils/winutils.hpp>
 
 #include <fstream>
@@ -47,6 +48,12 @@ static SKSEMessagingInterface* messages = nullptr;
 
 /// Log file in pre-defined location
 static std::ofstream logfile;
+
+/// Local initialization
+static std::unique_ptr<sseimgui_api> sseimgui;
+
+/// [shared] In order to hook upon D3D11
+std::unique_ptr<ssegui_api> ssegui;
 
 /// [shared] Table with pointers
 imgui_api imgui;
@@ -112,11 +119,40 @@ handle_sseimgui_message (SKSEMessagingInterface::Message* m)
                 << "). Bailing out." << std::endl;
         return;
     }
-    log () << "Accepting SSEIMGUI interface..." << std::endl;
-    extern void render (int);
-    sseimgui_api* sseimgui = reinterpret_cast<sseimgui_api*> (m->data);
+
+    sseimgui.reset (new sseimgui_api (*reinterpret_cast<sseimgui_api*> (m->data)));
     imgui = sseimgui->make_imgui_api ();
-    sseimgui->render_listener (&render, 0);
+    log () << "Accepted SSEIMGUI interface v" << SSEIMGUI_API_VERSION << std::endl;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+/// This is somewhere in SKSE Input Loaded message, before sse-imgui
+
+static void
+handle_ssegui_message (SKSEMessagingInterface::Message* m)
+{
+    if (!sseimgui)
+        return;
+
+    if (m->type != SSEGUI_API_VERSION)
+    {
+        log () << "Unsupported SSEGUI interface v" << m->type
+               << " (it is not v" << SSEGUI_API_VERSION
+               << "). Bailing out." << std::endl;
+        return;
+    }
+    ssegui.reset (new ssegui_api (*reinterpret_cast<ssegui_api*> (m->data)));
+    log () << "Accepted SSEGUI interface v" << SSEGUI_API_VERSION << std::endl;
+
+    extern bool setup ();
+    if (!setup ())
+    {
+        log () << "Unable to initialize SSE Journal" << std::endl;
+        return;
+    }
+
+    extern void render (int); sseimgui->render_listener (&render, 0);
     log () << "All done." << std::endl;
 }
 
@@ -130,6 +166,7 @@ handle_skse_message (SKSEMessagingInterface::Message* m)
     if (m->type != SKSEMessagingInterface::kMessage_PostLoad)
         return;
     log () << "SKSE Post Load." << std::endl;
+    messages->RegisterListener (plugin, "SSEGUI", handle_ssegui_message);
     messages->RegisterListener (plugin, "SSEIMGUI", handle_sseimgui_message);
 }
 

@@ -26,16 +26,25 @@
  */
 
 #include <sse-imgui/sse-imgui.h>
+#include <sse-gui/sse-gui.h>
+
 #include <fstream>
 #include <vector>
+#include <memory>
+
+#include <d3d11.h>
+#include <DDSTextureLoader/DDSTextureLoader.h>
 
 //--------------------------------------------------------------------------------------------------
 
 /// Defined in skse.cpp
-extern std::ofstream logfile;
+extern std::ofstream& log ();
 
 /// Defined in skse.cpp
 extern imgui_api imgui;
+
+/// Defined in skse.cpp
+extern std::unique_ptr<ssegui_api> ssegui;
 
 //--------------------------------------------------------------------------------------------------
 
@@ -45,8 +54,40 @@ struct {
     bool show_chapters;
     int selected_chapter;
     std::vector<std::string> chapters;
+
+    ID3D11Device*           device;
+    ID3D11DeviceContext*    context;
+    IDXGISwapChain*         chain;
+    HWND                    window;
 }
 journal = {};
+
+//--------------------------------------------------------------------------------------------------
+
+bool
+setup ()
+{
+    if (!ssegui->parameter ("ID3D11Device", &journal.device)
+            || !ssegui->parameter ("ID3D11DeviceContext", &journal.context)
+            || !ssegui->parameter ("IDXGISwapChain", &journal.chain)
+            || !ssegui->parameter ("window", &journal.window)
+            )
+    {
+        log () << "Unable to fetch SSE GUI parameters." << std::endl;
+        return false;
+    }
+
+    ID3D11ShaderResourceView* srv = nullptr;
+    if (FAILED (DirectX::CreateDDSTextureFromFile (journal.device, journal.context,
+                    L"Data\\interface\\wetandcold\\title.dds", nullptr, &srv)))
+    {
+        log () << "Unable to load DDS." << std::endl;
+        return false;
+    }
+    srv->Release ();
+
+    return true;
+}
 
 //--------------------------------------------------------------------------------------------------
 
@@ -65,7 +106,6 @@ render (int active)
 {
     if (!active)
         return;
-
 
     imgui.igBegin ("SSE Journal", nullptr, 0);
     imgui.igCheckbox ("Options", &journal.show_options);

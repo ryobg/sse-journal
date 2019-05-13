@@ -59,6 +59,8 @@ struct {
     ID3D11DeviceContext*    context;
     IDXGISwapChain*         chain;
     HWND                    window;
+
+    ID3D11ShaderResourceView* background;
 }
 journal = {};
 
@@ -77,14 +79,13 @@ setup ()
         return false;
     }
 
-    ID3D11ShaderResourceView* srv = nullptr;
+    // This is good candidate to offload to SSE ImGui
     if (FAILED (DirectX::CreateDDSTextureFromFile (journal.device, journal.context,
-                    L"Data\\interface\\wetandcold\\title.dds", nullptr, &srv)))
+                    L"Data\\interface\\wetandcold\\title.dds", nullptr, &journal.background)))
     {
         log () << "Unable to load DDS." << std::endl;
         return false;
     }
-    srv->Release ();
 
     return true;
 }
@@ -104,12 +105,14 @@ print_chapter (void* data, int idx, const char** out_txt)
 void SSEIMGUI_CCONV
 render (int active)
 {
-    if (!active)
+    if (!active || !journal.background)
         return;
 
     imgui.igBegin ("SSE Journal", nullptr, 0);
     imgui.igCheckbox ("Options", &journal.show_options);
     imgui.igCheckbox ("Chapters", &journal.show_chapters);
+    imgui.igImage (journal.background, ImVec2 {768, 444}, ImVec2 {0,0}, ImVec2 {1,1},
+            ImVec4 {1.f,1.f,1.f,1.f}, ImVec4 {1.f,1.f,1.f,0.f});
     imgui.igEnd ();
 
     if (journal.show_options)

@@ -27,6 +27,7 @@
 
 #include <sse-imgui/sse-imgui.h>
 #include <fstream>
+#include <vector>
 
 //--------------------------------------------------------------------------------------------------
 
@@ -38,39 +39,50 @@ extern imgui_api imgui;
 
 //--------------------------------------------------------------------------------------------------
 
+/// State of the current Journal run
+struct {
+    bool show_options;
+    bool show_chapters;
+    int selected_chapter;
+    std::vector<std::string> chapters;
+}
+journal = {};
+
+//--------------------------------------------------------------------------------------------------
+
+static bool
+print_chapter (void* data, int idx, const char** out_txt)
+{
+    auto vec = reinterpret_cast<std::string*> (data);
+    *out_txt = vec[idx].c_str ();
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+
 void SSEIMGUI_CCONV
 render (int active)
 {
     if (!active)
         return;
 
-    static bool show_demo_window = true;
-    static bool show_another_window = false;
 
-    if (show_demo_window)
-        imgui.igShowDemoWindow (&show_demo_window);
+    imgui.igBegin ("SSE Journal", nullptr, 0);
+    imgui.igCheckbox ("Options", &journal.show_options);
+    imgui.igCheckbox ("Chapters", &journal.show_chapters);
+    imgui.igEnd ();
+
+    if (journal.show_options)
     {
-        static float f = 0.0f;
-        static int counter = 0;
-        imgui.igBegin ("Hello, world!", nullptr, 0);
-        imgui.igText ("This is some useful text.");
-        imgui.igCheckbox ("Demo Window", &show_demo_window);
-        imgui.igCheckbox ("Another Window", &show_another_window);
-        imgui.igSliderFloat ("float", &f, 0.0f, 1.0f, "%.3f", 1.f);
-        if (imgui.igButton ("Button", ImVec2 {}))
-            counter++;
-        imgui.igSameLine (0.f, -1.f);
-        imgui.igText ("counter = %d", counter);
-        imgui.igText ("Application average %.3f ms/frame (%.1f FPS)",
-                1000.0f / imgui.igGetIO ()->Framerate, imgui.igGetIO ()->Framerate);
+        imgui.igBegin ("SSE Journal: Options", &journal.show_options, 0);
         imgui.igEnd ();
     }
-    if (show_another_window)
+
+    if (journal.show_chapters)
     {
-        imgui.igBegin ("Another Window", &show_another_window, 0);
-        imgui.igText ("Hello from another window!");
-        if (imgui.igButton ("Close Me", ImVec2 {}))
-            show_another_window = false;
+        imgui.igBegin ("SSE Journal: Chapters", &journal.show_chapters, 0);
+        imgui.igListBoxFnPtr ("Table of Content", &journal.selected_chapter, print_chapter,
+                journal.chapters.data (), static_cast<int> (journal.chapters.size ()), -1);
         imgui.igEnd ();
     }
 }

@@ -115,8 +115,8 @@ handle_sseimgui_message (SKSEMessagingInterface::Message* m)
     log () << "Accepting SSEIMGUI interface..." << std::endl;
     extern void render (int);
     sseimgui_api* sseimgui = reinterpret_cast<sseimgui_api*> (m->data);
-    sseimgui->render_listener (&render, 0);
     imgui = sseimgui->make_imgui_api ();
+    sseimgui->render_listener (&render, 0);
     log () << "All done." << std::endl;
 }
 

@@ -81,7 +81,7 @@ setup ()
 
     // This is good candidate to offload to SSE ImGui
     if (FAILED (DirectX::CreateDDSTextureFromFile (journal.device, journal.context,
-                    L"Data\\interface\\wetandcold\\title.dds", nullptr, &journal.background)))
+                    L"Data\\interface\\sse-journal\\book.dds", nullptr, &journal.background)))
     {
         log () << "Unable to load DDS." << std::endl;
         return false;
@@ -108,11 +108,19 @@ render (int active)
     if (!active || !journal.background)
         return;
 
-    imgui.igBegin ("SSE Journal", nullptr, 0);
+    imgui.igBegin ("SSE Journal", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar
+            | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground);
+
+    auto wpos = imgui.igGetWindowPos ();
+    auto wbr = imgui.igGetWindowSize ();
+    wbr.x += wpos.x; wbr.y += wpos.y;
+    imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
+            wpos, wbr, ImVec2 {0,0}, ImVec2 {1,.7226f},
+            imgui.igGetColorU32Vec4 (ImVec4 {1.f,1.f,1.f,1.f}));
+
     imgui.igCheckbox ("Options", &journal.show_options);
     imgui.igCheckbox ("Chapters", &journal.show_chapters);
-    imgui.igImage (journal.background, ImVec2 {768, 444}, ImVec2 {0,0}, ImVec2 {1,1},
-            ImVec4 {1.f,1.f,1.f,1.f}, ImVec4 {1.f,1.f,1.f,0.f});
     imgui.igEnd ();
 
     if (journal.show_options)

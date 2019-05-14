@@ -11,7 +11,7 @@
 #define _WIN32_WINNT 0x0600 //VISTA
 #endif
 
-#ifndef _In_
+//#ifndef _In_
 #define _In_
 #define _In_z_
 #define _In_reads_bytes_(x)
@@ -22,7 +22,7 @@
 #define _Out_writes_(x)
 #define _Use_decl_annotations_
 #define _Analysis_assume_(x)
-#endif
+//#endif
 
 #include "DDSTextureLoader_.h"
 

@@ -94,18 +94,14 @@ setup ()
     // This MUST go to SSE ImGui
     imgui.ImFontAtlas_AddFontDefault (fa, nullptr);
 
-    journal.font_viner = imgui.ImFontAtlas_AddFontFromFileTTF (
-                fa, "Data\\interface\\sse-journal\\VinerHandITC.ttf", 30.f, nullptr, nullptr);
+    extern ImFont* viner_font (float, const ImFontConfig*, const ImWchar*);
+    journal.font_viner = viner_font (32.f, nullptr, nullptr);
     if (!journal.font_viner)
     {
-        log () << "Unable to load font VinerHandITC.tff" << std::endl;
+        log () << "Unable to load font Viner Hand" << std::endl;
         return false;
     }
 
-    journal.left_title.resize (256, ' ');
-    journal.right_title = journal.left_title;
-    journal.left_text.resize (4096, ' ');
-    journal.right_text = journal.left_text;
     return true;
 }
 

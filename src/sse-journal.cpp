@@ -147,6 +147,11 @@ render (int active)
             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar
             | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground);
     imgui.igPushFont (journal.font_viner);
+	imgui.igPushStyleColorU32 (ImGuiCol_ButtonActive, 0);
+	imgui.igPushStyleColorU32 (ImGuiCol_ButtonHovered, 0);
+	imgui.igPushStyleColorU32 (ImGuiCol_Button, 0);
+	imgui.igPushStyleColorU32 (ImGuiCol_NavHighlight, 0);
+	imgui.igPushStyleVarFloat (ImGuiStyleVar_FrameBorderSize, 0.f);
 
     auto wpos = imgui.igGetWindowPos ();
     auto wsz = imgui.igGetWindowSize ();
@@ -212,6 +217,8 @@ render (int active)
     imgui.igSetCursorPos (ImVec2 { wsz.x-page_width, 0 });
     bool next_pressed = imgui.igButton ("Next", ImVec2 { page_width, wsz.y });
 
+	imgui.igPopStyleVar (1);
+	imgui.igPopStyleColor (4);
     imgui.igPopFont ();
     imgui.igEnd ();
 }

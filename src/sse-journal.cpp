@@ -111,12 +111,32 @@ setup ()
 
 //--------------------------------------------------------------------------------------------------
 
-static bool
-print_chapter (void* data, int idx, const char** out_txt)
+static int
+imgui_text_resize (ImGuiInputTextCallbackData* data)
 {
-    auto vec = reinterpret_cast<std::string*> (data);
-    *out_txt = vec[idx].c_str ();
-    return true;
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
+    {
+        auto str = reinterpret_cast<std::string*> (data->UserData);
+        str->resize (data->BufSize);  // generally data->BufSize == data->BufTextLen + 1
+        data->Buf = const_cast<char*> (str->c_str ());
+    }
+    return 0;
+}
+
+static bool
+imgui_input_text (const char* label, std::string& text)
+{
+    return imgui.igInputText (
+            label, const_cast<char*> (text.c_str ()), text.capacity () + 1,
+            ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
+}
+
+static bool
+imgui_input_multiline (const char* label, std::string& text, ImVec2 const& size)
+{
+    return imgui.igInputTextMultiline (
+            label, const_cast<char*> (text.c_str ()), text.capacity () + 1, size,
+            ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -169,13 +189,10 @@ render (int active)
     bool chapters_pressed = imgui.igButton ("Chapters", ImVec2 { menu_width, menu_height });
 
     imgui.igSetCursorPos (ImVec2 { left_page, title_top });
-    imgui.igInputTextMultiline ("##Left title",
-            &journal.left_title[0], journal.left_title.capacity (),
-            ImVec2 { text_width, title_height }, 0, nullptr, nullptr);
+    imgui.igSetNextItemWidth (text_width);
+    imgui_input_text ("##Left title", journal.left_title);
     imgui.igSetCursorPos (ImVec2 { left_page, text_top });
-    imgui.igInputTextMultiline ("##Left text",
-            &journal.left_text[0], journal.left_text.capacity (),
-            ImVec2 { text_width, text_height }, 0, nullptr, nullptr);
+    imgui_input_multiline ("##Left text", journal.left_text, ImVec2 { text_width, text_height });
     imgui.igSetCursorPos (ImVec2 { left_page, status_top });
     imgui.igText ("Port status bar goes here");
 
@@ -189,13 +206,10 @@ render (int active)
     bool load_pressed = imgui.igButton ("Load", ImVec2 { menu_width, menu_height });
 
     imgui.igSetCursorPos (ImVec2 { right_page, title_top });
-    imgui.igInputTextMultiline ("##Right title",
-            &journal.left_title[0], journal.left_title.capacity (),
-            ImVec2 { text_width, title_height }, 0, nullptr, nullptr);
+    imgui.igSetNextItemWidth (text_width);
+    imgui_input_text ("##Right title", journal.right_title);
     imgui.igSetCursorPos (ImVec2 { right_page, text_top });
-    imgui.igInputTextMultiline ("##Right text",
-            &journal.left_text[0], journal.left_text.capacity (),
-            ImVec2 { text_width, text_height }, 0, nullptr, nullptr);
+    imgui_input_multiline ("##Right text", journal.right_text, ImVec2 { text_width, text_height });
     imgui.igSetCursorPos (ImVec2 { right_page, status_top });
     imgui.igText ("Starboard status bar goes here");
 

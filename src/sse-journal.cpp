@@ -166,6 +166,26 @@ imgui_input_multiline (const char* label, std::string& text, ImVec2 const& size)
 
 //--------------------------------------------------------------------------------------------------
 
+class button
+{
+public:
+	void draw ()
+	{
+    	imgui.igSetCursorPos (ImVec2 { 0, 0 });
+    	imgui.igSetCursorPos (ImVec2 { left_page + menu_width + menu_gap, menu_top });
+
+    bool prev_pressed = imgui.igInvisibleButton ("Prev##Button", ImVec2 { page_width, wsz.y });
+    if (imgui.igIsItemHovered (0))
+        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
+                wpos, ImVec2 {wpos.x+page_width, wpos.y+wsz.y}, ImVec2 {0,0},
+                ImVec2 {.050f, .7226f}, page_hover_tint);
+	float txtsz = imgui.igCalcTextSize ("Prev", nullptr, false, -1.f);
+    imgui.igSetCursorPos (ImVec2 { 0+.5f*(page_width-txtsz.x), 0+.5f(wsz.y-txtsz.y) });
+	imgui.igTextUnformatted ("Prev", nullptr);
+};
+
+//--------------------------------------------------------------------------------------------------
+
 void SSEIMGUI_CCONV
 render (int active)
 {
@@ -189,6 +209,8 @@ render (int active)
             wpos, ImVec2 {wpos.x+wsz.x, wpos.y+wsz.y}, ImVec2 {0,0}, ImVec2 {1,.7226f},
             imgui.igGetColorU32Vec4 (ImVec4 {1,1,1,1}));
 
+	// Ratio, ratio multiplied by pixel size and the absolute positions summed with these
+	// are used all below. It may be pulled off as more capsulated and less dublication.
     const float page_width    = .050f * wsz.x;
     const float menu_width    = .128f * wsz.x;
     const float menu_height   = .044f * wsz.y;
@@ -203,7 +225,7 @@ render (int active)
     const float status_top = .950f * wsz.y;
 
     const float menu_gap = (text_width - menu_width*3) * .5f;
-    auto constexpr page_hover_tint = IM_COL32 (191,157,111,64);
+    auto constexpr page_hover_tint = IM_COL32 (191, 157, 111, 64);
 
     // Port/larboard/ladebord
 
@@ -211,11 +233,14 @@ render (int active)
 	imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.button_color);
 
     imgui.igSetCursorPos (ImVec2 { 0, 0 });
-    bool prev_pressed = imgui.igButton ("Prev", ImVec2 { page_width, wsz.y });
+    bool prev_pressed = imgui.igInvisibleButton ("Prev##Button", ImVec2 { page_width, wsz.y });
     if (imgui.igIsItemHovered (0))
         imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
                 wpos, ImVec2 {wpos.x+page_width, wpos.y+wsz.y}, ImVec2 {0,0},
                 ImVec2 {.050f, .7226f}, page_hover_tint);
+	float txtsz = imgui.igCalcTextSize ("Prev", nullptr, false, -1.f);
+    imgui.igSetCursorPos (ImVec2 { 0+.5f*(page_width-txtsz.x), 0+.5f(wsz.y-txtsz.y) });
+	imgui.igTextUnformatted ("Prev", nullptr);
 
     imgui.igSetCursorPos (ImVec2 { left_page, menu_top });
     bool options_pressed = imgui.igButton ("Options", ImVec2 { menu_width, menu_height });

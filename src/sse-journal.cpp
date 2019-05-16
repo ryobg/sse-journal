@@ -32,6 +32,7 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <cstring>
 
 #include <d3d11.h>
 #include <DDSTextureLoader/DDSTextureLoader.h>
@@ -60,6 +61,69 @@ extern imgui_api imgui;
 /// Defined in skse.cpp
 extern std::unique_ptr<ssegui_api> ssegui;
 
+auto constexpr lite_tint = IM_COL32 (191, 157, 111,  64);
+auto constexpr dark_tint = IM_COL32 (191, 157, 111,  96);
+auto constexpr frame_col = IM_COL32 (192, 192, 192, 128);
+
+//--------------------------------------------------------------------------------------------------
+
+/// Wraps up common logic for drawing a button, uses shared state across the instances
+class button_t
+{
+	ImVec2 tl, sz, align;
+	const char *label, *label_end;
+    std::uint32_t hover_tint;
+public:
+    static ImFont* font;
+    static std::uint32_t* color;
+    static ID3D11ShaderResourceView* background;
+
+	static ImVec2 wpos, wsz; ///< Updated on each frame
+
+    button_t () : label (nullptr), label_end (nullptr) {}
+    button_t (const char* label,
+            float tlx, float tly, float szx, float szy,
+            std::uint32_t hover, float ax = .5f, float ay = .5f)
+    {
+        this->align = ImVec2 { ax, ay };
+        this->label = label;
+        label_end = std::strchr (label, '#');
+        tl.x = tlx, tl.y = tly, sz.x = szx, sz.y = szy;
+        hover_tint = hover;
+    }
+
+	bool draw ()
+	{
+        imgui.igPushFont (font);
+        imgui.igPushStyleColorU32 (ImGuiCol_Text, *color);
+        ImVec2 pos { wsz.x * tl.x, wsz.y * tl.y },
+               sz  { wsz.x * sz.x, wsz.y * sz.y };
+    	imgui.igSetCursorPos (pos);
+    	bool pressed = imgui.igInvisibleButton (label, sz);
+    	bool hovered = imgui.igIsItemHovered (0);
+		if (hovered)
+		{
+        	imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), background,
+                ImVec2 { wpos.x + pos.x, wpos.y + pos.y },
+                ImVec2 { wpos.x +  sz.x, wpos.y +  sz.y },
+                ImVec2 { tl.x, tl.y }, ImVec2 { tl.x + sz.x, tl.y + sz.y }, hover_tint);
+		}
+	    auto txtsz = imgui.igCalcTextSize (label, label_end, false, -1.f);
+        imgui.igSetCursorPos (ImVec2 { pos.x + align.x * (sz.x - txtsz.x),
+                                       pos.y + align.y * (sz.y - txtsz.y) });
+	    imgui.igTextUnformatted (label, label_end);
+        imgui.igPopFont ();
+        imgui.igPopStyleColor (1);
+        return pressed;
+    }
+};
+
+ImFont* button_t::font = nullptr;
+std::uint32_t* button_t::color = nullptr;
+ID3D11ShaderResourceView* button_t::background = nullptr;
+ImVec2 button_t::wpos = {};
+ImVec2 button_t::wsz = {};
+
 //--------------------------------------------------------------------------------------------------
 
 /// State of the current Journal run
@@ -67,7 +131,6 @@ struct {
     bool show_options;
     bool show_chapters;
     int selected_chapter;
-    std::vector<std::string> chapters;
 
     ID3D11Device*           device;
     ID3D11DeviceContext*    context;
@@ -79,6 +142,8 @@ struct {
 
     ImFont *button_font, *chapter_font, *text_font;
     std::uint32_t button_color, chapter_color, text_color;
+
+    button_t prev, next, settings, variables, chapters, save, saveas, load;
 }
 journal = {};
 
@@ -121,22 +186,36 @@ setup ()
 
     journal.button_color = IM_COL32_WHITE;
     journal.chapter_color = IM_COL32_BLACK;
-    journal.text_color = IM_COL32_BLACK;
+    journal.text_color = IM_COL32 (42, 34, 24, 192);
+
+    button_t::font = journal.button_font;
+    button_t::color = &journal.button_color;
+    button_t::background = journal.background;
+    journal.prev      = button_t ("Prev##Button"     ,   0.f, 0, .050f,.7226f, lite_tint);
+    journal.settings  = button_t ("Settings##Button" , .070f, 0, .128f, .044f, dark_tint, 0, .85f);
+    journal.variables = button_t ("Variables##Button", .212f, 0, .128f, .044f, dark_tint, 0, .85f);
+    journal.chapters  = button_t ("Chapters##Button" , .354f, 0, .128f, .044f, dark_tint, 0, .85f);
+    journal.save      = button_t ("Save##Button"     , .518f, 0, .128f, .044f, dark_tint, 0, .85f);
+    journal.saveas    = button_t ("Save As##Button"  , .660f, 0, .128f, .044f, dark_tint, 0, .85f);
+    journal.load      = button_t ("Load##Button"     , .802f, 0, .128f, .044f, dark_tint, 0, .85f);
+    journal.next      = button_t ("Next##Button"     ,  .95f, 0, .050f,.7226f, lite_tint);
+
     return true;
 }
 
 //--------------------------------------------------------------------------------------------------
 
+/// Resizing one by one causes FPS stutters and CDTs, hence minimal SSO size + power of 2
+
 static int
 imgui_text_resize (ImGuiInputTextCallbackData* data)
 {
-    auto better_size = [] (std::size_t n) // next power of 2 basically
+    auto better_size = [] (std::size_t n)
     {
         std::size_t p = 16;
         while (p < n) p <<= 1;
         return p;
     };
-    // generally data->BufSize == data->BufTextLen + 1
     if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
     {
         auto str = reinterpret_cast<std::string*> (data->UserData);
@@ -166,26 +245,6 @@ imgui_input_multiline (const char* label, std::string& text, ImVec2 const& size)
 
 //--------------------------------------------------------------------------------------------------
 
-class button
-{
-public:
-	void draw ()
-	{
-    	imgui.igSetCursorPos (ImVec2 { 0, 0 });
-    	imgui.igSetCursorPos (ImVec2 { left_page + menu_width + menu_gap, menu_top });
-
-    bool prev_pressed = imgui.igInvisibleButton ("Prev##Button", ImVec2 { page_width, wsz.y });
-    if (imgui.igIsItemHovered (0))
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
-                wpos, ImVec2 {wpos.x+page_width, wpos.y+wsz.y}, ImVec2 {0,0},
-                ImVec2 {.050f, .7226f}, page_hover_tint);
-	float txtsz = imgui.igCalcTextSize ("Prev", nullptr, false, -1.f);
-    imgui.igSetCursorPos (ImVec2 { 0+.5f*(page_width-txtsz.x), 0+.5f(wsz.y-txtsz.y) });
-	imgui.igTextUnformatted ("Prev", nullptr);
-};
-
-//--------------------------------------------------------------------------------------------------
-
 void SSEIMGUI_CCONV
 render (int active)
 {
@@ -195,15 +254,12 @@ render (int active)
     imgui.igBegin ("SSE Journal", nullptr,
             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar
             | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground);
-    int push_col = 0;//IM_COL32 (191,157,111,64)
-	imgui.igPushStyleColorU32 (ImGuiCol_ButtonActive, 0); ++push_col;
-	imgui.igPushStyleColorU32 (ImGuiCol_ButtonHovered, 0); ++push_col;
-	imgui.igPushStyleColorU32 (ImGuiCol_Button, 0); ++push_col;
+    int push_col = 0;
 	imgui.igPushStyleColorU32 (ImGuiCol_FrameBg, 0); ++push_col;
 	imgui.igPushStyleVarFloat (ImGuiStyleVar_FrameBorderSize, 0);
 
-    auto wpos = imgui.igGetWindowPos ();
-    auto wsz = imgui.igGetWindowSize ();
+    auto wpos = button_t::wpos = imgui.igGetWindowPos ();
+    auto wsz  = button_t::wsz  = imgui.igGetWindowSize ();
 
     imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
             wpos, ImVec2 {wpos.x+wsz.x, wpos.y+wsz.y}, ImVec2 {0,0}, ImVec2 {1,.7226f},
@@ -211,173 +267,142 @@ render (int active)
 
 	// Ratio, ratio multiplied by pixel size and the absolute positions summed with these
 	// are used all below. It may be pulled off as more capsulated and less dublication.
-    const float page_width    = .050f * wsz.x;
-    const float menu_width    = .128f * wsz.x;
-    const float menu_height   = .044f * wsz.y;
     const float text_width    = .412f * wsz.x;
     const float text_height   = .784f * wsz.y;
 
     const float left_page  = .070f * wsz.x;
     const float right_page = .518f * wsz.x;
-    const float menu_top   = .038f * wsz.y;
     const float title_top  = .103f * wsz.y;
     const float text_top   = .159f * wsz.y;
     const float status_top = .950f * wsz.y;
 
-    const float menu_gap = (text_width - menu_width*3) * .5f;
-    auto constexpr page_hover_tint = IM_COL32 (191, 157, 111, 64);
-
     // Port/larboard/ladebord
+    // Starboard/steobord
 
-    imgui.igPushFont (journal.button_font);
-	imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.button_color);
-
-    imgui.igSetCursorPos (ImVec2 { 0, 0 });
-    bool prev_pressed = imgui.igInvisibleButton ("Prev##Button", ImVec2 { page_width, wsz.y });
-    if (imgui.igIsItemHovered (0))
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
-                wpos, ImVec2 {wpos.x+page_width, wpos.y+wsz.y}, ImVec2 {0,0},
-                ImVec2 {.050f, .7226f}, page_hover_tint);
-	float txtsz = imgui.igCalcTextSize ("Prev", nullptr, false, -1.f);
-    imgui.igSetCursorPos (ImVec2 { 0+.5f*(page_width-txtsz.x), 0+.5f(wsz.y-txtsz.y) });
-	imgui.igTextUnformatted ("Prev", nullptr);
-
-    imgui.igSetCursorPos (ImVec2 { left_page, menu_top });
-    bool options_pressed = imgui.igButton ("Options", ImVec2 { menu_width, menu_height });
-    if (imgui.igIsItemHovered (0))
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
-                ImVec2 { wpos.x+left_page, wpos.y },
-                ImVec2 { wpos.x+left_page+menu_width, wpos.y+menu_top+menu_height },
-                ImVec2 { .070f, 0 }, ImVec2 {.070f+.128f, .038f+.044f }, page_hover_tint);
-
-    imgui.igSetCursorPos (ImVec2 { left_page + menu_width + menu_gap, menu_top });
-    bool variables_pressed = imgui.igButton ("Variables", ImVec2 { menu_width, menu_height });
-    if (imgui.igIsItemHovered (0))
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
-                ImVec2 { wpos.x+left_page+menu_gap+menu_width, wpos.y },
-                ImVec2 { wpos.x+left_page+menu_gap+menu_width*2, wpos.y+menu_top+menu_height },
-                ImVec2 { .070f+.128f+.014f, 0 }, ImVec2 {.070f+2*.128f+.014f, .038f+.044f },
-                page_hover_tint);
-
-    imgui.igSetCursorPos (ImVec2 { left_page + 2*(menu_width + menu_gap), menu_top });
-    bool chapters_pressed = imgui.igButton ("Chapters", ImVec2 { menu_width, menu_height });
-    if (imgui.igIsItemHovered (0))
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
-                ImVec2 { wpos.x+left_page+2*(menu_gap+menu_width), wpos.y },
-                ImVec2 { wpos.x+left_page+2*menu_gap+3*menu_width, wpos.y+menu_top+menu_height },
-                ImVec2 { .070f+2*(.128f+.014f), 0 }, ImVec2 {.070f+3*.128f+2*.014f, .038f+.044f },
-                page_hover_tint);
-
-    imgui.igPopFont ();
-	imgui.igPopStyleColor (1);
+    bool prev = journal.prev.draw ();
+    bool settings = journal.settings.draw ();
+    bool variables = journal.variables.draw ();
+    bool chapters = journal.chapters.draw ();
+    bool save = journal.save.draw ();
+    bool saveas = journal.saveas.draw ();
+    bool load = journal.load.draw ();
+    bool next = journal.next.draw ();
 
     imgui.igPushFont (journal.chapter_font);
 	imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.chapter_color);
+
     imgui.igSetNextItemWidth (text_width);
     imgui.igSetCursorPos (ImVec2 { left_page, title_top });
     imgui_input_text ("##Left title", journal.left_title);
     if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
-        imgui.ImDrawList_AddRectFilled (imgui.igGetWindowDrawList (),
+        imgui.ImDrawList_AddRect (imgui.igGetWindowDrawList (),
                 ImVec2 { wpos.x+left_page, wpos.y+title_top },
                 ImVec2 { wpos.x+left_page+text_width, wpos.y+title_top+imgui.igGetFrameHeight () },
-                page_hover_tint, 0, ImDrawCornerFlags_All);
-    imgui.igPopFont ();
-	imgui.igPopStyleColor (1);
+                frame_col, 0, ImDrawCornerFlags_All, 1.f);
 
-    imgui.igPushFont (journal.text_font);
-	imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.text_color);
-    imgui.igSetCursorPos (ImVec2 { left_page, text_top });
-    imgui_input_multiline ("##Left text", journal.left_text, ImVec2 { text_width, text_height });
-    if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
-        imgui.ImDrawList_AddRectFilled (imgui.igGetWindowDrawList (),
-                ImVec2 { wpos.x+left_page, wpos.y+text_top },
-                ImVec2 { wpos.x+left_page+text_width, wpos.y+text_top+text_height },
-                page_hover_tint, 0, ImDrawCornerFlags_All);
-    imgui.igPopFont ();
-	imgui.igPopStyleColor (1);
-
-    imgui.igPushFont (journal.text_font);
-	imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.button_color);
-    imgui.igSetCursorPos (ImVec2 { left_page, status_top });
-    imgui.igText ("Port status bar goes here");
-    imgui.igPopFont ();
-	imgui.igPopStyleColor (1);
-
-    // Starboard/steobord
-
-    imgui.igPushFont (journal.button_font);
-	imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.button_color);
-
-    imgui.igSetCursorPos (ImVec2 { wsz.x-page_width, 0 });
-    bool next_pressed = imgui.igButton ("Next", ImVec2 { page_width, wsz.y });
-    if (imgui.igIsItemHovered (0))
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
-                ImVec2 { wpos.x+wsz.x-page_width, wpos.y }, ImVec2 { wpos.x+wsz.x, wpos.y+wsz.y },
-                ImVec2 { .950f, 0 }, ImVec2 { 1, .7226f }, page_hover_tint);
-
-    imgui.igSetCursorPos (ImVec2 { right_page, menu_top });
-    bool overwrite_pressed = imgui.igButton ("Overwrite", ImVec2 { menu_width, menu_height });
-    if (imgui.igIsItemHovered (0))
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
-                ImVec2 { wpos.x+right_page, wpos.y },
-                ImVec2 { wpos.x+right_page+menu_width, wpos.y+menu_top+menu_height },
-                ImVec2 { .518f, 0 }, ImVec2 {.518f+.128f, .038f+.044f }, page_hover_tint);
-
-    imgui.igSetCursorPos (ImVec2 { right_page + menu_width + menu_gap, menu_top });
-    bool saveas_pressed = imgui.igButton ("Save as", ImVec2 { menu_width, menu_height });
-    if (imgui.igIsItemHovered (0))
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
-                ImVec2 { wpos.x+right_page+menu_gap+menu_width, wpos.y },
-                ImVec2 { wpos.x+right_page+menu_gap+menu_width*2, wpos.y+menu_top+menu_height },
-                ImVec2 { .518f+.128f+.014f, 0 }, ImVec2 {.518f+2*.128f+.014f, .038f+.044f },
-                page_hover_tint);
-
-    imgui.igSetCursorPos (ImVec2 { right_page + 2*(menu_width + menu_gap), menu_top });
-    bool load_pressed = imgui.igButton ("Load", ImVec2 { menu_width, menu_height });
-    if (imgui.igIsItemHovered (0))
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
-                ImVec2 { wpos.x+right_page+2*(menu_gap+menu_width), wpos.y },
-                ImVec2 { wpos.x+right_page+2*menu_gap+3*menu_width, wpos.y+menu_top+menu_height },
-                ImVec2 { .518f+2*(.128f+.014f), 0 }, ImVec2 {.518f+3*.128f+2*.014f, .038f+.044f },
-                page_hover_tint);
-
-    imgui.igPopFont ();
-	imgui.igPopStyleColor (1);
-
-    imgui.igPushFont (journal.chapter_font);
-	imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.chapter_color);
     imgui.igSetCursorPos (ImVec2 { right_page, title_top });
     imgui.igSetNextItemWidth (text_width);
     imgui_input_text ("##Right title", journal.right_title);
     if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
-        imgui.ImDrawList_AddRectFilled (imgui.igGetWindowDrawList (),
+        imgui.ImDrawList_AddRect (imgui.igGetWindowDrawList (),
                 ImVec2 { wpos.x+right_page, wpos.y+title_top },
                 ImVec2 { wpos.x+right_page+text_width, wpos.y+title_top+imgui.igGetFrameHeight () },
-                page_hover_tint, 0, ImDrawCornerFlags_All);
+                frame_col, 0, ImDrawCornerFlags_All, 1.f);
+
     imgui.igPopFont ();
 	imgui.igPopStyleColor (1);
-
     imgui.igPushFont (journal.text_font);
 	imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.text_color);
+
+    imgui.igSetCursorPos (ImVec2 { left_page, text_top });
+    imgui_input_multiline ("##Left text", journal.left_text, ImVec2 { text_width, text_height });
+    if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
+        imgui.ImDrawList_AddRect (imgui.igGetWindowDrawList (),
+                ImVec2 { wpos.x+left_page, wpos.y+text_top },
+                ImVec2 { wpos.x+left_page+text_width, wpos.y+text_top+text_height },
+                frame_col, 0, ImDrawCornerFlags_All, 1.f);
+
     imgui.igSetCursorPos (ImVec2 { right_page, text_top });
     imgui_input_multiline ("##Right text", journal.right_text, ImVec2 { text_width, text_height });
     if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
-        imgui.ImDrawList_AddRectFilled (imgui.igGetWindowDrawList (),
+        imgui.ImDrawList_AddRect (imgui.igGetWindowDrawList (),
                 ImVec2 { wpos.x+right_page, wpos.y+text_top },
                 ImVec2 { wpos.x+right_page+text_width, wpos.y+text_top+text_height },
-                page_hover_tint, 0, ImDrawCornerFlags_All);
+                frame_col, 0, ImDrawCornerFlags_All, 1.f);
+
     imgui.igPopFont ();
 	imgui.igPopStyleColor (1);
-
     imgui.igPushFont (journal.text_font);
 	imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.button_color);
+
+    imgui.igSetCursorPos (ImVec2 { left_page, status_top });
+    imgui.igText ("Port status bar goes here");
     imgui.igSetCursorPos (ImVec2 { right_page, status_top });
     imgui.igText ("Starboard status bar goes here");
+
     imgui.igPopFont ();
 	imgui.igPopStyleColor (1);
 
 	imgui.igPopStyleVar (1);
 	imgui.igPopStyleColor (push_col);
+    imgui.igEnd ();
+
+    extern void draw_settings ();
+    if (settings)
+        draw_settings ();
+    extern void draw_variables ();
+    if (variables)
+        draw_variables ();
+    extern void draw_chapters ();
+    if (chapters)
+        draw_chapters ();
+}
+
+//--------------------------------------------------------------------------------------------------
+
+void draw_settings ()
+{
+    imgui.igBegin ("SSE Journal: Settings", nullptr, 0);
+
+    static ImVec4 button_c  = imgui.igColorConvertU32ToFloat4 (journal.button_color),
+                  chapter_c = imgui.igColorConvertU32ToFloat4 (journal.chapter_color),
+                  text_c    = imgui.igColorConvertU32ToFloat4 (journal.text_color);
+    constexpr int cflags = ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayHSV
+        | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_PickerHueBar;
+
+    imgui.igBeginGroup ();
+    if (imgui.igColorEdit4 ("Color for buttons", (float*) &button_c, cflags))
+        journal.button_color = imgui.igGetColorU32Vec4 (button_c);
+    if (imgui.igColorEdit4 ("Color for Chapter title", (float*) &chapter_c, cflags))
+        journal.chapter_color = imgui.igGetColorU32Vec4 (chapter_c);
+    if (imgui.igColorEdit4 ("Color for text content", (float*) &text_c, cflags))
+        journal.text_color = imgui.igGetColorU32Vec4 (text_c);
+    imgui.igEndGroup ();
+    imgui.igSameLine (0, 0);
+    imgui.igBeginGroup ();
+    imgui.igDragFloat ("Font for buttons",
+            &journal.button_font->Scale, .005f, .5f, 2.f, "%.1f", 1);
+    imgui.igDragFloat ("Font for Chapter titles",
+            &journal.chapter_font->Scale, .005f, .5f, 2.f, "%.1f", 1);
+    imgui.igDragFloat ("Font for text content",
+            &journal.text_font->Scale, .005f, .5f, 2.f, "%.1f", 1);
+    imgui.igEndGroup ();
+    imgui.igEnd ();
+}
+
+//--------------------------------------------------------------------------------------------------
+
+void draw_variables ()
+{
+    imgui.igBegin ("SSE Journal: Variables", nullptr, 0);
+    imgui.igEnd ();
+}
+
+//--------------------------------------------------------------------------------------------------
+
+void draw_chapters ()
+{
+    imgui.igBegin ("SSE Journal: Chapters", nullptr, 0);
     imgui.igEnd ();
 }
 

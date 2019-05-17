@@ -34,8 +34,6 @@
 #include <string>
 #include <cstring>
 #include <functional>
-#include <iostream>
-#include <ctime>
 
 #include <d3d11.h>
 #include <DDSTextureLoader/DDSTextureLoader.h>
@@ -193,7 +191,7 @@ setup ()
 
     journal.button_color = IM_COL32_WHITE;
     journal.chapter_color = IM_COL32_BLACK;
-    journal.text_color = IM_COL32 (42, 34, 24, 192);
+    journal.text_color = IM_COL32 (21, 17, 12, 255);
 
     button_t::font = journal.button_font;
     button_t::color = &journal.button_color;
@@ -208,13 +206,9 @@ setup ()
     j.button_load      = button_t ("Load##B"     , .812f, 0, .128f, .060f, dark_tint, .5f, .85f);
     j.button_next      = button_t ("Next##B"     ,  .95f, 0, .050f,   1.f, lite_tint);
 
-    journal.variables.emplace_back ("Local time", [] () -> std::string
-        {
-            std::array<char, 100> buff = {};
-            std::time_t t = std::time (nullptr);
-            std::strftime (buff.data (), buff.size (), "%X", std::localtime (&t));
-            return buff.data ();
-        });
+    extern std::vector<std::pair<std::string, std::function<std::string ()>>> make_variables ();
+    journal.variables = make_variables ();
+
     return true;
 }
 
@@ -222,19 +216,30 @@ setup ()
 
 /// Resizing one by one causes FPS stutters and CDTs, hence minimal SSO size + power of 2
 
+static inline std::size_t
+next_pow2 (std::size_t n)
+{
+    std::size_t p = 16;
+    while (p < n) p <<= 1;
+    return p;
+};
+
+static void
+append_input (std::string& text, std::string const& suffix)
+{
+    auto sz = std::strlen (text.c_str ());
+    if (sz + suffix.size () > text.size ())
+        text.resize (next_pow2 (sz + suffix.size () + text.size ()));
+    text.insert (sz, suffix);
+}
+
 static int
 imgui_text_resize (ImGuiInputTextCallbackData* data)
 {
-    auto better_size = [] (std::size_t n)
-    {
-        std::size_t p = 16;
-        while (p < n) p <<= 1;
-        return p;
-    };
     if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
     {
         auto str = reinterpret_cast<std::string*> (data->UserData);
-        str->resize (better_size (data->BufSize));
+        str->resize (next_pow2 (data->BufSize));
         data->Buf = const_cast<char*> (str->c_str ());
     }
     return 0;
@@ -381,8 +386,8 @@ render (int active)
 
 void draw_settings ()
 {
-    imgui.igBegin ("SSE Journal: Settings", nullptr, 0);
     imgui.igPushFont (journal.system_font);
+    imgui.igBegin ("SSE Journal: Settings", nullptr, 0);
 
     static ImVec4 button_c  = imgui.igColorConvertU32ToFloat4 (journal.button_color),
                   chapter_c = imgui.igColorConvertU32ToFloat4 (journal.chapter_color),
@@ -409,8 +414,8 @@ void draw_settings ()
     imgui.igText ("Default font:");
     imgui.igSliderFloat ("Scale", &journal.system_font->Scale, .5f, 2.f, "%.2f", 1);
 
-    imgui.igPopFont ();
     imgui.igEnd ();
+    imgui.igPopFont ();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -425,24 +430,29 @@ extract_variable_text (void* data, int idx, const char** out_text)
 
 void draw_variables ()
 {
-    imgui.igBegin ("SSE Journal: Variables", nullptr, 0);
     imgui.igPushFont (journal.system_font);
+    imgui.igBegin ("SSE Journal: Variables", nullptr, 0);
 
     static int selection = -1;
     static std::string output;
 
-    if (imgui.igListBoxFnPtr ("Available variables", &selection, extract_variable_text,
+    if (imgui.igListBoxFnPtr ("Variables", &selection, extract_variable_text,
             &journal.variables, static_cast<int> (journal.variables.size ()), -1))
     {
         if (unsigned (selection) < journal.variables.size ())
             output = journal.variables[selection].second ();
     }
     imgui_input_text ("Output", output);
+    if (imgui.igButton ("Append left", ImVec2 {}))
+        append_input (journal.left_text, output);
+    imgui.igSameLine (0, -1);
+    if (imgui.igButton ("Append right", ImVec2 {}))
+        append_input (journal.right_text, output);
     if (imgui.igButton ("Copy to Clipboard", ImVec2 {}))
         imgui.igSetClipboardText (output.c_str ());
 
-    imgui.igPopFont ();
     imgui.igEnd ();
+    imgui.igPopFont ();
 }
 
 //--------------------------------------------------------------------------------------------------

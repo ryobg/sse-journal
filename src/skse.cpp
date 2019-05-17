@@ -49,6 +49,8 @@ static SKSEMessagingInterface* messages = nullptr;
 /// Log file in pre-defined location
 static std::ofstream logfile;
 
+std::string logfile_path;
+
 /// Local initialization
 static std::unique_ptr<sseimgui_api> sseimgui;
 
@@ -63,14 +65,14 @@ imgui_api imgui;
 static void
 open_log ()
 {
-    std::string path;
-    if (known_folder_path (FOLDERID_Documents, path))
+    logfile_path = "";
+    if (known_folder_path (FOLDERID_Documents, logfile_path))
     {
         // Before plugins are loaded, SKSE takes care to create the directiories
-        path += "\\My Games\\Skyrim Special Edition\\SKSE\\";
+        logfile_path += "\\My Games\\Skyrim Special Edition\\SKSE\\";
     }
-    path += "sse-journal.log";
-    logfile.open (path);
+    logfile_path += "sse-journal.log";
+    logfile.open (logfile_path);
 }
 
 //--------------------------------------------------------------------------------------------------

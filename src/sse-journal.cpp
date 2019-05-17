@@ -27,6 +27,7 @@
 
 #include <sse-imgui/sse-imgui.h>
 #include <sse-gui/sse-gui.h>
+#include <utils/winutils.hpp>
 
 #include <fstream>
 #include <vector>
@@ -37,6 +38,15 @@
 
 #include <d3d11.h>
 #include <DDSTextureLoader/DDSTextureLoader.h>
+
+// Warning come in a BSON parser, which is not used, and probably shouldn't be
+#if defined(__GNUC__)
+#  pragma GCC diagnostic push
+#  pragma GCC diagnostic ignored "-Wformat="
+#  pragma GCC diagnostic ignored "-Wformat-extra-args"
+#  include <nlohmann/json.hpp>
+#  pragma GCC diagnostic pop
+#endif
 
 //--------------------------------------------------------------------------------------------------
 
@@ -57,6 +67,9 @@
 extern std::ofstream& log ();
 
 /// Defined in skse.cpp
+extern void journal_version (int* maj, int* min, int* patch, const char** timestamp);
+
+/// Defined in skse.cpp
 extern imgui_api imgui;
 
 /// Defined in skse.cpp
@@ -65,6 +78,11 @@ extern std::unique_ptr<ssegui_api> ssegui;
 auto constexpr lite_tint = IM_COL32 (191, 157, 111,  64);
 auto constexpr dark_tint = IM_COL32 (191, 157, 111,  96);
 auto constexpr frame_col = IM_COL32 (192, 157, 111, 192);
+
+static const char* settings_location = "Data\\interface\\sse-journal\\settings.json";
+
+/// Defined in skse.cpp
+extern std::string logfile_path;
 
 //--------------------------------------------------------------------------------------------------
 
@@ -152,6 +170,106 @@ journal = {};
 
 //--------------------------------------------------------------------------------------------------
 
+static bool
+save_settings ()
+{
+    int maj, min, patch;
+    const char* timestamp;
+    journal_version (&maj, &min, &patch, &timestamp);
+
+    try
+    {
+        nlohmann::json json = {
+            { "version", {
+                { "major", maj },
+                { "minor", min },
+                { "patch", patch },
+                { "timestamp", timestamp }
+            }},
+            { "text font", {
+                { "scale", journal.text_font->Scale },
+                { "color", hex_string (journal.text_color) }
+            }},
+            { "chapter font", {
+                { "scale", journal.chapter_font->Scale },
+                { "color", hex_string (journal.chapter_color) }
+            }},
+            { "button font", {
+                { "scale", journal.button_font->Scale },
+                { "color", hex_string (journal.button_color) }
+            }},
+            { "system font", {
+                { "scale", journal.system_font->Scale }
+            }}
+        };
+
+        std::ofstream of (settings_location);
+        if (!of.is_open ())
+        {
+            log () << "Unable to open " << settings_location << " for writting." << std::endl;
+            return false;
+        }
+
+        of << json.dump (4);
+    }
+    catch (std::exception const& ex)
+    {
+        log () << "Unable to save settings file: " << ex.what () << std::endl;
+        return false;
+    }
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+static bool
+load_settings ()
+{
+    int maj, min;
+    journal_version (&maj, &min, nullptr, nullptr);
+
+    try
+    {
+        std::ifstream fi (settings_location);
+        if (!fi.is_open ())
+        {
+            log () << "Unable to open " << settings_location << " for reading." << std::endl;
+            return false;
+        }
+
+        nlohmann::json json;
+        fi >> json;
+
+        if (json["version"]["major"].get<int> () != maj
+                || json["version"]["minor"].get<int> () != min)
+        {
+            log () << "Version mismatch in the settings file." << std::endl;
+            return false;
+        }
+
+        journal.text_font->Scale = json["text font"]["scale"].get<float> ();
+        journal.chapter_font->Scale = json["chapter font"]["scale"].get<float> ();
+        journal.button_font->Scale = json["button font"]["scale"].get<float> ();
+        journal.system_font->Scale = json["system font"]["scale"].get<float> ();
+
+        std::string color;
+        color = json["text font"]["color"].get<std::string> ();
+        journal.text_color = std::stoull (color, nullptr, 0);
+        color = json["chapter font"]["color"].get<std::string> ();
+        journal.chapter_color = std::stoull (color, nullptr, 0);
+        color = json["button font"]["color"].get<std::string> ();
+        journal.button_color = std::stoull (color, nullptr, 0);
+    }
+    catch (std::exception const& ex)
+    {
+        log () << "Unable to save settings file: " << ex.what () << std::endl;
+        return false;
+    }
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+
 bool
 setup ()
 {
@@ -209,6 +327,7 @@ setup ()
     extern std::vector<std::pair<std::string, std::function<std::string ()>>> make_variables ();
     journal.variables = make_variables ();
 
+    load_settings (); //file may not exist yet
     return true;
 }
 
@@ -389,36 +508,68 @@ render (int active)
 
 //--------------------------------------------------------------------------------------------------
 
-void draw_settings ()
+static void
+popup_error (bool begin, const char* name)
+{
+    if (begin && !imgui.igIsPopupOpen (name))
+        imgui.igOpenPopup (name);
+    if (imgui.igBeginPopupModal (name, nullptr, 0))
+    {
+        imgui.igText ("An error has occured, see %s", logfile_path.c_str ());
+        if (imgui.igButton ("Close", ImVec2 {} ))
+            imgui.igCloseCurrentPopup ();
+        imgui.igSetItemDefaultFocus ();
+        imgui.igEndPopup ();
+    }
+}
+
+//--------------------------------------------------------------------------------------------------
+
+void
+draw_settings ()
 {
     imgui.igPushFont (journal.system_font);
-    imgui.igBegin ("SSE Journal: Settings", nullptr, 0);
+    if (imgui.igBegin ("SSE Journal: Settings", &journal.show_settings, 0))
+    {
+        static ImVec4 button_c  = imgui.igColorConvertU32ToFloat4 (journal.button_color),
+                      chapter_c = imgui.igColorConvertU32ToFloat4 (journal.chapter_color),
+                      text_c    = imgui.igColorConvertU32ToFloat4 (journal.text_color);
+        constexpr int cflags = ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayHSV
+            | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_PickerHueBar
+            | ImGuiColorEditFlags_AlphaBar;
 
-    static ImVec4 button_c  = imgui.igColorConvertU32ToFloat4 (journal.button_color),
-                  chapter_c = imgui.igColorConvertU32ToFloat4 (journal.chapter_color),
-                  text_c    = imgui.igColorConvertU32ToFloat4 (journal.text_color);
-    constexpr int cflags = ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayHSV
-        | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_PickerHueBar
-        | ImGuiColorEditFlags_AlphaBar;
+        imgui.igText ("Buttons font:");
+        if (imgui.igColorEdit4 ("Color##Buttons", (float*) &button_c, cflags))
+            journal.button_color = imgui.igGetColorU32Vec4 (button_c);
+        imgui.igSliderFloat ("Scale##Buttons", &journal.button_font->Scale, .5f, 2.f, "%.2f", 1);
 
-    imgui.igText ("Buttons font:");
-    if (imgui.igColorEdit4 ("Color##Buttons", (float*) &button_c, cflags))
-        journal.button_color = imgui.igGetColorU32Vec4 (button_c);
-    imgui.igSliderFloat ("Scale##Buttons", &journal.button_font->Scale, .5f, 2.f, "%.2f", 1);
+        imgui.igText ("Titles font:");
+        if (imgui.igColorEdit4 ("Color##Titles", (float*) &chapter_c, cflags))
+            journal.chapter_color = imgui.igGetColorU32Vec4 (chapter_c);
+        imgui.igSliderFloat ("Scale##Titles", &journal.chapter_font->Scale, .5f, 2.f, "%.2f", 1);
 
-    imgui.igText ("Titles font:");
-    if (imgui.igColorEdit4 ("Color##Titles", (float*) &chapter_c, cflags))
-        journal.chapter_color = imgui.igGetColorU32Vec4 (chapter_c);
-    imgui.igSliderFloat ("Scale##Titles", &journal.chapter_font->Scale, .5f, 2.f, "%.2f", 1);
+        imgui.igText ("Text font:");
+        if (imgui.igColorEdit4 ("Color##Text", (float*) &text_c, cflags))
+            journal.text_color = imgui.igGetColorU32Vec4 (text_c);
+        imgui.igSliderFloat ("Scale##Text", &journal.text_font->Scale, .5f, 2.f, "%.2f", 1);
 
-    imgui.igText ("Text font:");
-    if (imgui.igColorEdit4 ("Color##Text", (float*) &text_c, cflags))
-        journal.text_color = imgui.igGetColorU32Vec4 (text_c);
-    imgui.igSliderFloat ("Scale##Text", &journal.text_font->Scale, .5f, 2.f, "%.2f", 1);
+        imgui.igText ("Default font:");
+        imgui.igSliderFloat ("Scale", &journal.system_font->Scale, .5f, 2.f, "%.2f", 1);
 
-    imgui.igText ("Default font:");
-    imgui.igSliderFloat ("Scale", &journal.system_font->Scale, .5f, 2.f, "%.2f", 1);
+        imgui.igDummy (ImVec2 { 1, imgui.igGetFrameHeight () });
 
+        bool save_ok = true;
+        if (imgui.igButton ("Save settings", ImVec2 {}))
+            save_ok = save_settings ();
+        popup_error (!save_ok, "Saving failed");
+
+        imgui.igSameLine (0, -1);
+
+        bool load_ok = true;
+        if (imgui.igButton ("Load settings", ImVec2 {}))
+            load_ok = load_settings ();
+        popup_error (!load_ok, "Loading failed");
+    }
     imgui.igEnd ();
     imgui.igPopFont ();
 }
@@ -433,39 +584,45 @@ extract_variable_text (void* data, int idx, const char** out_text)
     return true;
 }
 
-void draw_variables ()
+void
+draw_variables ()
 {
     imgui.igPushFont (journal.system_font);
-    imgui.igBegin ("SSE Journal: Variables", nullptr, 0);
-
-    static int selection = -1;
-    static std::string output;
-
-    if (imgui.igListBoxFnPtr ("Variables", &selection, extract_variable_text,
-            &journal.variables, static_cast<int> (journal.variables.size ()), -1))
+    if (imgui.igBegin ("SSE Journal: Variables", &journal.show_variables, 0))
     {
-        if (unsigned (selection) < journal.variables.size ())
-            output = journal.variables[selection].second ();
-    }
-    imgui_input_text ("Output", output);
-    if (imgui.igButton ("Append left", ImVec2 {}))
-        append_input (journal.left_text, output);
-    imgui.igSameLine (0, -1);
-    if (imgui.igButton ("Append right", ImVec2 {}))
-        append_input (journal.right_text, output);
-    if (imgui.igButton ("Copy to Clipboard", ImVec2 {}))
-        imgui.igSetClipboardText (output.c_str ());
+        static int selection = -1;
+        static std::string output;
 
+        if (imgui.igListBoxFnPtr ("Variables", &selection, extract_variable_text,
+                &journal.variables, static_cast<int> (journal.variables.size ()), -1))
+        {
+            if (unsigned (selection) < journal.variables.size ())
+                output = journal.variables[selection].second ();
+        }
+        imgui_input_text ("Output", output);
+        if (imgui.igButton ("Append left", ImVec2 {}))
+            append_input (journal.left_text, output);
+        imgui.igSameLine (0, -1);
+        if (imgui.igButton ("Append right", ImVec2 {}))
+            append_input (journal.right_text, output);
+        if (imgui.igButton ("Copy to Clipboard", ImVec2 {}))
+            imgui.igSetClipboardText (output.c_str ());
+    }
     imgui.igEnd ();
     imgui.igPopFont ();
 }
 
 //--------------------------------------------------------------------------------------------------
 
-void draw_chapters ()
+void
+draw_chapters ()
 {
-    imgui.igBegin ("SSE Journal: Chapters", nullptr, 0);
+    imgui.igPushFont (journal.system_font);
+    if (imgui.igBegin ("SSE Journal: Chapters", &journal.show_chapters, 0))
+    {
+    }
     imgui.igEnd ();
+    imgui.igPopFont ();
 }
 
 //--------------------------------------------------------------------------------------------------

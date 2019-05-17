@@ -102,15 +102,15 @@ copy_string (In const& src, std::size_t* n, Out* dst)
 /// Converts any scalar to a 0xabcde string (made for fun)
 
 template<class T> static
-std::string hex_string (T v)
+std::string hex_string (T v, bool shrink = true)
 {
     std::array<char, sizeof (T)*2+2+1> dst;
-    auto x = int (dst.size () - 2);
+    auto x = shrink ? int (dst.size () - 2) : 2;
     constexpr char lut[16] = {'0','1','2','3','4','5','6','7','8','9','a','b','c','d','e','f'};
     for (auto i = int (dst.size ()-1); i--; v >>= 4)
     {
         dst[i] = lut[v & 0xF];
-        if (v & 0xf) x = i;
+        if (shrink && (v & 0xf)) x = i;
     }
     dst.back () = '\0';
     dst[x-1] = 'x';

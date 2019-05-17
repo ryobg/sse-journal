@@ -337,6 +337,11 @@ render (int active)
     imgui.igPopStyleColor (1);
     imgui.igPushFont (journal.text_font);
     imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.text_color);
+    // Awkward, but there is no sane way to disable it
+    imgui.igPushStyleColorU32 (ImGuiCol_ScrollbarBg, IM_COL32_BLACK_TRANS);
+    imgui.igPushStyleColorU32 (ImGuiCol_ScrollbarGrab, IM_COL32_BLACK_TRANS);
+    imgui.igPushStyleColorU32 (ImGuiCol_ScrollbarGrabHovered, IM_COL32_BLACK_TRANS);
+    imgui.igPushStyleColorU32 (ImGuiCol_ScrollbarGrabActive, IM_COL32_BLACK_TRANS);
 
     imgui.igSetCursorPos (ImVec2 { left_page, text_top });
     imgui_input_multiline ("##Left text", journal.left_text, ImVec2 { text_width, text_height });
@@ -355,7 +360,7 @@ render (int active)
                 frame_col, 0, ImDrawCornerFlags_All, 2.f);
 
     imgui.igPopFont ();
-    imgui.igPopStyleColor (1);
+    imgui.igPopStyleColor (5);
     imgui.igPushFont (journal.text_font);
     imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.button_color);
 

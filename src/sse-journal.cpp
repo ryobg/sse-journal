@@ -33,6 +33,9 @@
 #include <memory>
 #include <string>
 #include <cstring>
+#include <functional>
+#include <iostream>
+#include <ctime>
 
 #include <d3d11.h>
 #include <DDSTextureLoader/DDSTextureLoader.h>
@@ -129,10 +132,6 @@ ImVec2 button_t::wsz = {};
 
 /// State of the current Journal run
 struct {
-    bool show_options;
-    bool show_chapters;
-    int selected_chapter;
-
     ID3D11Device*           device;
     ID3D11DeviceContext*    context;
     IDXGISwapChain*         chain;
@@ -144,7 +143,12 @@ struct {
     ImFont *button_font, *chapter_font, *text_font, *system_font;
     std::uint32_t button_color, chapter_color, text_color;
 
-    button_t prev, next, settings, variables, chapters, save, saveas, load;
+    button_t button_prev, button_next,
+             button_settings, button_variables, button_chapters,
+             button_save, button_saveas, button_load;
+    bool show_settings, show_variables, show_chapters;
+
+    std::vector<std::pair<std::string, std::function<std::string ()>>> variables;
 }
 journal = {};
 
@@ -194,15 +198,23 @@ setup ()
     button_t::font = journal.button_font;
     button_t::color = &journal.button_color;
     button_t::background = journal.background;
-    journal.prev      = button_t ("Prev##B"     ,   0.f, 0, .050f,   1.f, lite_tint);
-    journal.settings  = button_t ("Settings##B" , .070f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    journal.variables = button_t ("Variables##B", .212f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    journal.chapters  = button_t ("Chapters##B" , .354f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    journal.save      = button_t ("Save##B"     , .528f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    journal.saveas    = button_t ("Save As##B"  , .670f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    journal.load      = button_t ("Load##B"     , .812f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    journal.next      = button_t ("Next##B"     ,  .95f, 0, .050f,   1.f, lite_tint);
+    auto& j = journal;
+    j.button_prev      = button_t ("Prev##B"     ,   0.f, 0, .050f,   1.f, lite_tint);
+    j.button_settings  = button_t ("Settings##B" , .070f, 0, .128f, .060f, dark_tint, .5f, .85f);
+    j.button_variables = button_t ("Variables##B", .212f, 0, .128f, .060f, dark_tint, .5f, .85f);
+    j.button_chapters  = button_t ("Chapters##B" , .354f, 0, .128f, .060f, dark_tint, .5f, .85f);
+    j.button_save      = button_t ("Save##B"     , .528f, 0, .128f, .060f, dark_tint, .5f, .85f);
+    j.button_saveas    = button_t ("Save As##B"  , .670f, 0, .128f, .060f, dark_tint, .5f, .85f);
+    j.button_load      = button_t ("Load##B"     , .812f, 0, .128f, .060f, dark_tint, .5f, .85f);
+    j.button_next      = button_t ("Next##B"     ,  .95f, 0, .050f,   1.f, lite_tint);
 
+    journal.variables.emplace_back ("Local time", [] () -> std::string
+        {
+            std::array<char, 100> buff = {};
+            std::time_t t = std::time (nullptr);
+            std::strftime (buff.data (), buff.size (), "%X", std::localtime (&t));
+            return buff.data ();
+        });
     return true;
 }
 
@@ -282,20 +294,18 @@ render (int active)
     // Port/larboard/ladebord
     // Starboard/steobord
 
-    static bool settings = false, variables = false, chapters = false;
+    if (journal.button_settings.draw ())
+        journal.show_settings = !journal.show_settings;
+    if (journal.button_variables.draw ())
+        journal.show_variables = !journal.show_variables;
+    if (journal.button_chapters.draw ())
+        journal.show_chapters = !journal.show_chapters;
 
-    if (journal.settings.draw ())
-        settings = !settings;
-    if (journal.variables.draw ())
-        variables = !variables;
-    if (journal.chapters.draw ())
-        chapters = !chapters;
-
-    bool save = journal.save.draw ();
-    bool saveas = journal.saveas.draw ();
-    bool load = journal.load.draw ();
-    bool prev = journal.prev.draw ();
-    bool next = journal.next.draw ();
+    bool save = journal.button_save.draw ();
+    bool saveas = journal.button_saveas.draw ();
+    bool load = journal.button_load.draw ();
+    bool prev = journal.button_prev.draw ();
+    bool next = journal.button_next.draw ();
 
     imgui.igPushFont (journal.chapter_font);
     imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.chapter_color);
@@ -357,13 +367,13 @@ render (int active)
     imgui.igEnd ();
 
     extern void draw_settings ();
-    if (settings)
+    if (journal.show_settings)
         draw_settings ();
     extern void draw_variables ();
-    if (variables)
+    if (journal.show_variables)
         draw_variables ();
     extern void draw_chapters ();
-    if (chapters)
+    if (journal.show_chapters)
         draw_chapters ();
 }
 
@@ -405,9 +415,33 @@ void draw_settings ()
 
 //--------------------------------------------------------------------------------------------------
 
+static bool
+extract_variable_text (void* data, int idx, const char** out_text)
+{
+    auto vars = reinterpret_cast<decltype (journal.variables)*> (data);
+    *out_text = vars->at (idx).first.c_str ();
+    return true;
+}
+
 void draw_variables ()
 {
     imgui.igBegin ("SSE Journal: Variables", nullptr, 0);
+    imgui.igPushFont (journal.system_font);
+
+    static int selection = -1;
+    static std::string output;
+
+    if (imgui.igListBoxFnPtr ("Available variables", &selection, extract_variable_text,
+            &journal.variables, static_cast<int> (journal.variables.size ()), -1))
+    {
+        if (unsigned (selection) < journal.variables.size ())
+            output = journal.variables[selection].second ();
+    }
+    imgui_input_text ("Output", output);
+    if (imgui.igButton ("Copy to Clipboard", ImVec2 {}))
+        imgui.igSetClipboardText (output.c_str ());
+
+    imgui.igPopFont ();
     imgui.igEnd ();
 }
 

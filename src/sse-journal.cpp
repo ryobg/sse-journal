@@ -30,6 +30,7 @@
 #include <utils/winutils.hpp>
 
 #include <fstream>
+#include <map>
 #include <vector>
 #include <memory>
 #include <string>
@@ -80,6 +81,7 @@ auto constexpr dark_tint = IM_COL32 (191, 157, 111,  96);
 auto constexpr frame_col = IM_COL32 (192, 157, 111, 192);
 
 static const char* settings_location = "Data\\interface\\sse-journal\\settings.json";
+static const char* default_book = "Data\\interface\\sse-journal\\default_book.json";
 
 /// Defined in skse.cpp
 extern std::string logfile_path;
@@ -146,6 +148,13 @@ ImVec2 button_t::wsz = {};
 
 //--------------------------------------------------------------------------------------------------
 
+struct page_t
+{
+    std::string title, content;
+};
+
+//--------------------------------------------------------------------------------------------------
+
 /// State of the current Journal run
 struct {
     ID3D11Device*           device;
@@ -154,7 +163,6 @@ struct {
     HWND                    window;
 
     ID3D11ShaderResourceView* background;
-    std::string left_title, left_text, right_title, right_text;
 
     ImFont *button_font, *chapter_font, *text_font, *system_font;
     std::uint32_t button_color, chapter_color, text_color;
@@ -165,8 +173,124 @@ struct {
     bool show_settings, show_variables, show_chapters;
 
     std::vector<std::pair<std::string, std::function<std::string ()>>> variables;
+
+    std::vector<page_t> pages;
+    unsigned current_page;
 }
 journal = {};
+
+//--------------------------------------------------------------------------------------------------
+
+static bool
+save_book (std::string const& destination)
+{
+    int maj, min, patch;
+    const char* timestamp;
+    journal_version (&maj, &min, &patch, &timestamp);
+
+    try
+    {
+        nlohmann::json json = {
+            { "version", {
+                { "major", maj },
+                { "minor", min },
+                { "patch", patch },
+                { "timestamp", timestamp }
+            }},
+            { "size", journal.pages.size () },
+            { "current", journal.current_page },
+            { "pages", nlohmann::json::object () }
+        };
+
+        int i = 0;
+        for (auto const& p: journal.pages)
+            json["pages"][std::to_string (i++)] = {
+                { "title", p.title.c_str () },
+                { "content", p.content.c_str () }
+            };
+
+        std::ofstream of (destination);
+        if (!of.is_open ())
+        {
+            log () << "Unable to open " << settings_location << " for writting." << std::endl;
+            return false;
+        }
+
+        of << json.dump (4);
+    }
+    catch (std::exception const& ex)
+    {
+        log () << "Unable to save book: " << ex.what () << std::endl;
+        return false;
+    }
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+static bool
+load_book (std::string const& souce)
+{
+    int maj;
+    journal_version (&maj, nullptr, nullptr, nullptr);
+
+    try
+    {
+        std::ifstream fi (souce);
+        if (!fi.is_open ())
+        {
+            log () << "Unable to open " << settings_location << " for reading." << std::endl;
+            return false;
+        }
+
+        nlohmann::json json;
+        fi >> json;
+
+        if (json["version"]["major"].get<int> () != maj)
+        {
+            log () << "Incompatible book version." << std::endl;
+            return false;
+        }
+
+        auto current = json["current"].get<unsigned> ();
+
+        std::map<int, page_t> pages; // a map for page sorting and gaps fixing
+        for (auto const& kv: json["pages"].items ())
+        {
+            page_t p;
+            int ndx = std::stoull (kv.key ());
+            auto& v = kv.value ();
+            p.title = v["title"].get<std::string> ();
+            p.content = v["content"].get<std::string> ();
+            pages.emplace (ndx, std::move (p));
+        }
+
+        journal.pages.clear ();
+        journal.pages.reserve (pages.size ());
+        for (auto const& kv: pages)
+            journal.pages.emplace_back (page_t {
+                    std::move (kv.second.title), std::move (kv.second.content) });
+
+        while (journal.pages.size () < 3)
+        {
+            log () << "Less than two pages. Inserting empty one." << std::endl;
+            journal.pages.emplace_back (page_t { "", "" });
+        }
+
+        if (current >= journal.pages.size ())
+        {
+            log () << "Current page seems off. Setting it to the first one." << std::endl;
+            current = 0;
+        }
+        journal.current_page = current;
+    }
+    catch (std::exception const& ex)
+    {
+        log () << "Unable to load book: " << ex.what () << std::endl;
+        return false;
+    }
+    return true;
+}
 
 //--------------------------------------------------------------------------------------------------
 
@@ -225,8 +349,8 @@ save_settings ()
 static bool
 load_settings ()
 {
-    int maj, min;
-    journal_version (&maj, &min, nullptr, nullptr);
+    int maj;
+    journal_version (&maj, nullptr, nullptr, nullptr);
 
     try
     {
@@ -240,10 +364,9 @@ load_settings ()
         nlohmann::json json;
         fi >> json;
 
-        if (json["version"]["major"].get<int> () != maj
-                || json["version"]["minor"].get<int> () != min)
+        if (json["version"]["major"].get<int> () != maj)
         {
-            log () << "Version mismatch in the settings file." << std::endl;
+            log () << "Incompatible settings file." << std::endl;
             return false;
         }
 
@@ -327,7 +450,18 @@ setup ()
     extern std::vector<std::pair<std::string, std::function<std::string ()>>> make_variables ();
     journal.variables = make_variables ();
 
-    load_settings (); //file may not exist yet
+    load_settings (); // File may not exist yet
+
+    // Fun experiment: ~half a second to load/save 1000 pages with 40k symbols each.
+    // This is like ~40MB file, or something like 40 fat books of 500 pages each one. Should be
+    // bearable in practice for lower spec machines. The ImGui is well responsive btw.
+
+    load_book (default_book); // This one also may not exist
+    if (journal.pages.size () < 3)
+        journal.pages.resize (2);
+    if (journal.current_page >= journal.pages.size ())
+        journal.current_page = 0;
+
     return true;
 }
 
@@ -358,7 +492,7 @@ imgui_text_resize (ImGuiInputTextCallbackData* data)
     if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
     {
         auto str = reinterpret_cast<std::string*> (data->UserData);
-        str->resize (next_pow2 (data->BufSize));
+        str->resize (next_pow2 (data->BufSize) - 1); // likely to avoid the internal pow2 of resize
         data->Buf = const_cast<char*> (str->c_str ());
     }
     return 0;
@@ -367,19 +501,34 @@ imgui_text_resize (ImGuiInputTextCallbackData* data)
 static bool
 imgui_input_text (const char* label, std::string& text)
 {
-    if (text.size () < 16) text.resize (16);
     return imgui.igInputText (
-            label, &text[0], text.size (),
+            label, const_cast<char*> (text.c_str ()), text.size () + 1,
             ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
 }
 
 static bool
 imgui_input_multiline (const char* label, std::string& text, ImVec2 const& size)
 {
-    if (text.size () < 16) text.resize (16);
     return imgui.igInputTextMultiline (
-            label, &text[0], text.size (), size,
-            ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
+            label, const_cast<char*> (text.c_str ()), text.size () + 1,
+            size, ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
+}
+
+//--------------------------------------------------------------------------------------------------
+
+static void
+popup_error (bool begin, const char* name)
+{
+    if (begin && !imgui.igIsPopupOpen (name))
+        imgui.igOpenPopup (name);
+    if (imgui.igBeginPopupModal (name, nullptr, 0))
+    {
+        imgui.igText ("An error has occured, see %s", logfile_path.c_str ());
+        if (imgui.igButton ("Close", ImVec2 {} ))
+            imgui.igCloseCurrentPopup ();
+        imgui.igSetItemDefaultFocus ();
+        imgui.igEndPopup ();
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -425,9 +574,18 @@ render (int active)
     if (journal.button_chapters.draw ())
         journal.show_chapters = !journal.show_chapters;
 
-    bool save = journal.button_save.draw ();
+    bool action_ok = true;
+    if (journal.button_save.draw ())
+        action_ok = save_book (default_book);
+    popup_error (!action_ok, "Saving book failed");
+
     bool saveas = journal.button_saveas.draw ();
-    bool load = journal.button_load.draw ();
+
+    action_ok = true;
+    if (journal.button_load.draw ())
+        action_ok = load_book (default_book);
+    popup_error (!action_ok, "Loading book failed");
+
     bool prev = journal.button_prev.draw ();
     bool next = journal.button_next.draw ();
 
@@ -436,7 +594,7 @@ render (int active)
 
     imgui.igSetNextItemWidth (text_width);
     imgui.igSetCursorPos (ImVec2 { left_page, title_top });
-    imgui_input_text ("##Left title", journal.left_title);
+    imgui_input_text ("##Left title", journal.pages[journal.current_page].title);
     if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
         imgui.ImDrawList_AddRect (imgui.igGetWindowDrawList (),
                 ImVec2 { wpos.x+left_page, wpos.y+title_top },
@@ -445,7 +603,7 @@ render (int active)
 
     imgui.igSetCursorPos (ImVec2 { right_page, title_top });
     imgui.igSetNextItemWidth (text_width);
-    imgui_input_text ("##Right title", journal.right_title);
+    imgui_input_text ("##Right title", journal.pages[journal.current_page+1].title);
     if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
         imgui.ImDrawList_AddRect (imgui.igGetWindowDrawList (),
                 ImVec2 { wpos.x+right_page, wpos.y+title_top },
@@ -463,7 +621,8 @@ render (int active)
     imgui.igPushStyleColorU32 (ImGuiCol_ScrollbarGrabActive, IM_COL32_BLACK_TRANS);
 
     imgui.igSetCursorPos (ImVec2 { left_page, text_top });
-    imgui_input_multiline ("##Left text", journal.left_text, ImVec2 { text_width, text_height });
+    imgui_input_multiline ("##Left text",
+            journal.pages[journal.current_page].content, ImVec2 { text_width, text_height });
     if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
         imgui.ImDrawList_AddRect (imgui.igGetWindowDrawList (),
                 ImVec2 { wpos.x+left_page, wpos.y+text_top },
@@ -471,7 +630,8 @@ render (int active)
                 frame_col, 0, ImDrawCornerFlags_All, 2.f);
 
     imgui.igSetCursorPos (ImVec2 { right_page, text_top });
-    imgui_input_multiline ("##Right text", journal.right_text, ImVec2 { text_width, text_height });
+    imgui_input_multiline ("##Right text",
+            journal.pages[journal.current_page+1].content, ImVec2 { text_width, text_height });
     if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
         imgui.ImDrawList_AddRect (imgui.igGetWindowDrawList (),
                 ImVec2 { wpos.x+right_page, wpos.y+text_top },
@@ -504,23 +664,6 @@ render (int active)
     extern void draw_chapters ();
     if (journal.show_chapters)
         draw_chapters ();
-}
-
-//--------------------------------------------------------------------------------------------------
-
-static void
-popup_error (bool begin, const char* name)
-{
-    if (begin && !imgui.igIsPopupOpen (name))
-        imgui.igOpenPopup (name);
-    if (imgui.igBeginPopupModal (name, nullptr, 0))
-    {
-        imgui.igText ("An error has occured, see %s", logfile_path.c_str ());
-        if (imgui.igButton ("Close", ImVec2 {} ))
-            imgui.igCloseCurrentPopup ();
-        imgui.igSetItemDefaultFocus ();
-        imgui.igEndPopup ();
-    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -601,10 +744,10 @@ draw_variables ()
         }
         imgui_input_text ("Output", output);
         if (imgui.igButton ("Append left", ImVec2 {}))
-            append_input (journal.left_text, output);
+            append_input (journal.pages[journal.current_page].content, output);
         imgui.igSameLine (0, -1);
         if (imgui.igButton ("Append right", ImVec2 {}))
-            append_input (journal.right_text, output);
+            append_input (journal.pages[journal.current_page+1].content, output);
         if (imgui.igButton ("Copy to Clipboard", ImVec2 {}))
             imgui.igSetClipboardText (output.c_str ());
     }

@@ -33,7 +33,7 @@
 
 //--------------------------------------------------------------------------------------------------
 
-static inline std::string
+std::string
 local_time (const char* format)
 {
     std::array<char, 64> buff = {};

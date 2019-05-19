@@ -80,8 +80,10 @@ auto constexpr lite_tint = IM_COL32 (191, 157, 111,  64);
 auto constexpr dark_tint = IM_COL32 (191, 157, 111,  96);
 auto constexpr frame_col = IM_COL32 (192, 157, 111, 192);
 
-static const char* settings_location = "Data\\interface\\sse-journal\\settings.json";
-static const char* default_book = "Data\\interface\\sse-journal\\default_book.json";
+static const char* plugin_directory  = "Data\\SKSE\\Plugins\\sse-journal";
+static const wchar_t* background_dds =L"Data\\SKSE\\Plugins\\sse-journal\\book.dds";
+static const char* settings_location = "Data\\SKSE\\Plugins\\sse-journal\\settings.json";
+static const char* default_book      = "Data\\SKSE\\Plugins\\sse-journal\\default_book.json";
 
 /// Defined in skse.cpp
 extern std::string logfile_path;
@@ -170,7 +172,7 @@ struct {
     button_t button_prev, button_next,
              button_settings, button_variables, button_chapters,
              button_save, button_saveas, button_load;
-    bool show_settings, show_variables, show_chapters;
+    bool show_settings, show_variables, show_chapters, show_saveas;
 
     std::vector<std::pair<std::string, std::function<std::string ()>>> variables;
 
@@ -178,6 +180,46 @@ struct {
     unsigned current_page;
 }
 journal = {};
+
+//--------------------------------------------------------------------------------------------------
+
+static bool
+save_text (std::string const& destination)
+{
+    int maj, min, patch;
+    const char* timestamp;
+    journal_version (&maj, &min, &patch, &timestamp);
+
+    extern std::string local_time (const char* format);
+    try
+    {
+        std::ofstream of (destination);
+        if (!of.is_open ())
+        {
+            log () << "Unable to open " << destination << " for writting." << std::endl;
+            return false;
+        }
+
+        of << "SSE-Journal "<< maj<<'.'<< min <<'.'<< patch <<" ("<< timestamp << ")\n"
+           << journal.pages.size () << " pages exported on " << local_time ("%c") << '\n'
+           << std::endl;
+
+        int i = 0;
+        for (auto const& p: journal.pages)
+        {
+            of << "Page #" << std::to_string (i++) << '\n'
+               << p.title.c_str () << '\n'
+               << p.content.c_str () << '\n'
+               << std::endl;
+        }
+    }
+    catch (std::exception const& ex)
+    {
+        log () << "Unable to save book: " << ex.what () << std::endl;
+        return false;
+    }
+    return true;
+}
 
 //--------------------------------------------------------------------------------------------------
 
@@ -212,7 +254,7 @@ save_book (std::string const& destination)
         std::ofstream of (destination);
         if (!of.is_open ())
         {
-            log () << "Unable to open " << settings_location << " for writting." << std::endl;
+            log () << "Unable to open " << destination << " for writting." << std::endl;
             return false;
         }
 
@@ -229,17 +271,17 @@ save_book (std::string const& destination)
 //--------------------------------------------------------------------------------------------------
 
 static bool
-load_book (std::string const& souce)
+load_book (std::string const& source)
 {
     int maj;
     journal_version (&maj, nullptr, nullptr, nullptr);
 
     try
     {
-        std::ifstream fi (souce);
+        std::ifstream fi (source);
         if (!fi.is_open ())
         {
-            log () << "Unable to open " << settings_location << " for reading." << std::endl;
+            log () << "Unable to open " << source << " for reading." << std::endl;
             return false;
         }
 
@@ -407,8 +449,8 @@ setup ()
     }
 
     // This is good candidate to offload to SSE ImGui or SSE-GUI
-    if (FAILED (DirectX::CreateDDSTextureFromFile (journal.device, journal.context,
-                    L"Data\\interface\\sse-journal\\book.dds", nullptr, &journal.background)))
+    if (FAILED (DirectX::CreateDDSTextureFromFile (
+                    journal.device, journal.context, background_dds, nullptr, &journal.background)))
     {
         log () << "Unable to load DDS." << std::endl;
         return false;
@@ -498,19 +540,21 @@ imgui_text_resize (ImGuiInputTextCallbackData* data)
     return 0;
 }
 
-static bool
+/// Shared
+bool
 imgui_input_text (const char* label, std::string& text)
 {
     return imgui.igInputText (
-            label, const_cast<char*> (text.c_str ()), text.size () + 1,
+            label, const_cast<char*> (text.c_str ()), text.size (),
             ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
 }
 
-static bool
+/// Shared
+bool
 imgui_input_multiline (const char* label, std::string& text, ImVec2 const& size)
 {
     return imgui.igInputTextMultiline (
-            label, const_cast<char*> (text.c_str ()), text.size () + 1,
+            label, const_cast<char*> (text.c_str ()), text.size (),
             size, ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
 }
 
@@ -573,13 +617,13 @@ render (int active)
         journal.show_variables = !journal.show_variables;
     if (journal.button_chapters.draw ())
         journal.show_chapters = !journal.show_chapters;
+    if (journal.button_saveas.draw ())
+        journal.show_saveas = !journal.show_saveas;
 
     bool action_ok = true;
     if (journal.button_save.draw ())
         action_ok = save_book (default_book);
     popup_error (!action_ok, "Saving book failed");
-
-    bool saveas = journal.button_saveas.draw ();
 
     action_ok = true;
     if (journal.button_load.draw ())
@@ -664,6 +708,9 @@ render (int active)
     extern void draw_chapters ();
     if (journal.show_chapters)
         draw_chapters ();
+    extern void draw_saveas ();
+    if (journal.show_saveas)
+        draw_saveas ();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -719,7 +766,7 @@ draw_settings ()
 
 //--------------------------------------------------------------------------------------------------
 
-static bool
+bool
 extract_variable_text (void* data, int idx, const char** out_text)
 {
     auto vars = reinterpret_cast<decltype (journal.variables)*> (data);
@@ -763,6 +810,38 @@ draw_chapters ()
     imgui.igPushFont (journal.system_font);
     if (imgui.igBegin ("SSE Journal: Chapters", &journal.show_chapters, 0))
     {
+    }
+    imgui.igEnd ();
+    imgui.igPopFont ();
+}
+
+//--------------------------------------------------------------------------------------------------
+
+void
+draw_saveas ()
+{
+    static std::string name;
+    static int typesel = 0;
+    static std::array<const char*, 2> types = { "Journal book (*.json)", "Plain text (*.txt)" };
+
+    imgui.igPushFont (journal.system_font);
+    if (imgui.igBegin ("SSE Journal: Save as file", &journal.show_saveas, 0))
+    {
+        imgui.igText ("Storage folder: %s", plugin_directory);
+        imgui_input_text ("Name", name);
+        imgui.igCombo ("Type", &typesel, types.data (), int (types.size ()), -1);
+        if (imgui.igButton ("Cancel", ImVec2 {}))
+            journal.show_saveas = false;
+        imgui.igSameLine (0, -1);
+        if (imgui.igButton ("Save", ImVec2 {}))
+        {
+            bool ok = true;
+            auto root = (std::string (plugin_directory) + '\\') + name.c_str ();
+            if (typesel == 0) ok = save_book (root + ".json");
+            if (typesel == 1) ok = save_text (root + ".txt");
+            popup_error (!ok, "Save As failed");
+            if (ok) journal.show_saveas = false;
+        }
     }
     imgui.igEnd ();
     imgui.igPopFont ();

@@ -83,7 +83,8 @@ auto constexpr frame_col = IM_COL32 (192, 157, 111, 192);
 static const char* plugin_directory  = "Data\\SKSE\\Plugins\\sse-journal";
 static const wchar_t* background_dds =L"Data\\SKSE\\Plugins\\sse-journal\\book.dds";
 static const char* settings_location = "Data\\SKSE\\Plugins\\sse-journal\\settings.json";
-static const char* default_book      = "Data\\SKSE\\Plugins\\sse-journal\\default_book.json";
+static const char* books_directory   = "Data\\SKSE\\Plugins\\sse-journal\\books\\";
+static const char* default_book      = "Data\\SKSE\\Plugins\\sse-journal\\books\\default_book.json";
 
 /// Defined in skse.cpp
 extern std::string logfile_path;
@@ -172,7 +173,7 @@ struct {
     button_t button_prev, button_next,
              button_settings, button_variables, button_chapters,
              button_save, button_saveas, button_load;
-    bool show_settings, show_variables, show_chapters, show_saveas;
+    bool show_settings, show_variables, show_chapters, show_saveas, show_load;
 
     std::vector<std::pair<std::string, std::function<std::string ()>>> variables;
 
@@ -332,6 +333,14 @@ load_book (std::string const& source)
         return false;
     }
     return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+static bool
+load_takenotes (std::string const& source)
+{
+    return false;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -619,16 +628,13 @@ render (int active)
         journal.show_chapters = !journal.show_chapters;
     if (journal.button_saveas.draw ())
         journal.show_saveas = !journal.show_saveas;
+    if (journal.button_load.draw ())
+        journal.show_load = !journal.show_load;
 
     bool action_ok = true;
     if (journal.button_save.draw ())
         action_ok = save_book (default_book);
     popup_error (!action_ok, "Saving book failed");
-
-    action_ok = true;
-    if (journal.button_load.draw ())
-        action_ok = load_book (default_book);
-    popup_error (!action_ok, "Loading book failed");
 
     bool prev = journal.button_prev.draw ();
     bool next = journal.button_next.draw ();
@@ -711,6 +717,9 @@ render (int active)
     extern void draw_saveas ();
     if (journal.show_saveas)
         draw_saveas ();
+    extern void draw_load ();
+    if (journal.show_load)
+        draw_load ();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -751,14 +760,14 @@ draw_settings ()
         bool save_ok = true;
         if (imgui.igButton ("Save settings", ImVec2 {}))
             save_ok = save_settings ();
-        popup_error (!save_ok, "Saving failed");
+        popup_error (!save_ok, "Saving settings failed");
 
         imgui.igSameLine (0, -1);
 
         bool load_ok = true;
         if (imgui.igButton ("Load settings", ImVec2 {}))
             load_ok = load_settings ();
-        popup_error (!load_ok, "Loading failed");
+        popup_error (!load_ok, "Loading settings failed");
     }
     imgui.igEnd ();
     imgui.igPopFont ();
@@ -827,7 +836,7 @@ draw_saveas ()
     imgui.igPushFont (journal.system_font);
     if (imgui.igBegin ("SSE Journal: Save as file", &journal.show_saveas, 0))
     {
-        imgui.igText ("Storage folder: %s", plugin_directory);
+        imgui.igText ("Storage folder: %s", books_directory);
         imgui_input_text ("Name", name);
         imgui.igCombo ("Type", &typesel, types.data (), int (types.size ()), -1);
         if (imgui.igButton ("Cancel", ImVec2 {}))
@@ -836,11 +845,100 @@ draw_saveas ()
         if (imgui.igButton ("Save", ImVec2 {}))
         {
             bool ok = true;
-            auto root = (std::string (plugin_directory) + '\\') + name.c_str ();
+            auto root = std::string (books_directory) + name.c_str ();
             if (typesel == 0) ok = save_book (root + ".json");
             if (typesel == 1) ok = save_text (root + ".txt");
             popup_error (!ok, "Save As failed");
             if (ok) journal.show_saveas = false;
+        }
+    }
+    imgui.igEnd ();
+    imgui.igPopFont ();
+}
+
+//--------------------------------------------------------------------------------------------------
+
+template<class T>
+bool
+enumerate_files (T wildcard, std::vector<std::string>& out)
+{
+    std::wstring w;
+    if (!utf8_to_utf16 (wildcard, w))
+        return false;
+    out.clear ();
+    WIN32_FIND_DATA fd;
+    auto h = ::FindFirstFile (w.c_str (), &fd);
+    if (h == INVALID_HANDLE_VALUE)
+        return false;
+    do
+    {
+        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
+            continue;
+        std::string s;
+        if (!utf16_to_utf8 (fd.cFileName, s))
+            break;
+        out.emplace_back (std::move (s));
+    }
+    while (::FindNextFile (h, &fd));
+    auto e = ::GetLastError ();
+    ::FindClose (h);
+    return e == ERROR_NO_MORE_FILES;
+}
+
+void
+enumerate_books (const char* extension, std::vector<std::string>& out)
+{
+    auto wildcard = std::string (books_directory) + extension;
+    enumerate_files (wildcard.c_str (), out);
+    for (auto& name: out)
+        name.erase (name.find_last_of ('.'));
+}
+
+//--------------------------------------------------------------------------------------------------
+
+bool
+extract_vector_string (void* data, int idx, const char** out_text)
+{
+    auto vars = reinterpret_cast<std::vector<std::string>*> (data);
+    *out_text = vars->at (idx).c_str ();
+    return true;
+}
+
+void
+draw_load ()
+{
+    static int typesel = 0;
+    static int namesel = -1;
+    static std::array<const char*, 2> types = { "Journal book (*.json)", "Take Notes (*.xml)" };
+    static std::array<const char*, 2> filters = { "*.json", "*.xml" };
+    static std::vector<std::string> names;
+    static bool reload_names = false;
+
+    if (journal.show_load != reload_names)
+    {
+        reload_names = journal.show_load;
+        enumerate_books (filters[typesel], names);
+    }
+
+    imgui.igPushFont (journal.system_font);
+    if (imgui.igBegin ("SSE Journal: Load", &journal.show_load, 0))
+    {
+        imgui.igText ("Storage folder: %s", books_directory);
+        imgui.igListBoxFnPtr (
+                "Names", &namesel, extract_vector_string, &names, int (names.size ()), -1);
+        if (imgui.igCombo ("Type", &typesel, types.data (), int (types.size ()), -1))
+            enumerate_books (filters[typesel], names);
+        if (imgui.igButton ("Cancel", ImVec2 {}))
+            journal.show_load = false;
+        imgui.igSameLine (0, -1);
+        if (imgui.igButton ("Load", ImVec2 {}) && unsigned (namesel) < names.size ())
+        {
+            bool ok = true;
+            auto target = books_directory + names[namesel];
+            if (typesel == 0) ok = load_book (target + ".json");
+            if (typesel == 1) ok = load_takenotes (target + ".xml");
+            popup_error (!ok, "Load book failed");
+            if (ok) journal.show_load = false;
         }
     }
     imgui.igEnd ();

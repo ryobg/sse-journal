@@ -49,8 +49,6 @@ static SKSEMessagingInterface* messages = nullptr;
 /// Log file in pre-defined location
 static std::ofstream logfile;
 
-std::string logfile_path;
-
 /// Local initialization
 static std::unique_ptr<sseimgui_api> sseimgui;
 
@@ -59,6 +57,9 @@ std::unique_ptr<ssegui_api> ssegui;
 
 /// [shared] Table with pointers
 imgui_api imgui;
+
+/// [shared] Reports current log file path (for user friendly messages)
+std::string logfile_path;
 
 //--------------------------------------------------------------------------------------------------
 

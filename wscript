@@ -64,8 +64,7 @@ def configure(conf):
 def build (bld):
     bld.shlib (
         target   = APPNAME, 
-        source   = bld.path.ant_glob (["src/*.cpp", "share/utils/*.cpp",
-        "share/DDSTextureLoader/*.cpp"]), 
+        source   = bld.path.ant_glob (["src/*.cpp", "share/utils/*.cpp"]), 
         includes = ['src', 'share'],
         cxxflags = ['-DJOURNAL_TIMESTAMP="'+str(_datetime_now())+'"', '-DCIMGUI_NO_EXPORT'])
 

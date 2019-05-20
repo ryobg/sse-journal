@@ -28,8 +28,6 @@
 #include "sse-journal.hpp"
 #include <cstring>
 #include <cctype>
-// SSE-ImGui candidate
-#include <DDSTextureLoader/DDSTextureLoader.h>
 
 //--------------------------------------------------------------------------------------------------
 

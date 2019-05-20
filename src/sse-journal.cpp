@@ -26,10 +26,8 @@
  */
 
 #include "sse-journal.hpp"
-
-
 #include <cstring>
-
+#include <cctype>
 // SSE-ImGui candidate
 #include <DDSTextureLoader/DDSTextureLoader.h>
 
@@ -299,8 +297,12 @@ render (int active)
         action_ok = save_book (default_book);
     popup_error (!action_ok, "Saving book failed");
 
-    bool prev = journal.button_prev.draw ();
-    bool next = journal.button_next.draw ();
+    extern void previous_page ();
+    if (journal.button_prev.draw ())
+        previous_page ();
+    extern void next_page ();
+    if (journal.button_next.draw ())
+        next_page ();
 
     imgui.igPushFont (journal.chapter_font);
     imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.chapter_color);
@@ -476,12 +478,45 @@ draw_variables ()
 
 //--------------------------------------------------------------------------------------------------
 
+bool
+extract_chapter_title (void* data, int idx, const char** out_text)
+{
+    *out_text = journal.pages[idx].title.c_str ();
+    return true;
+}
+
 void
 draw_chapters ()
 {
+    static int selection = -1;
+
     imgui.igPushFont (journal.system_font);
     if (imgui.igBegin ("SSE Journal: Chapters", &journal.show_chapters, 0))
     {
+        if (imgui.igListBoxFnPtr ("Chapters", &selection, extract_chapter_title, nullptr,
+                int (journal.pages.size ()), -1))
+        {
+            int ndx = selection;
+            if (ndx + 1 == int (journal.pages.size ()))
+                ndx--;
+            journal.current_page = ndx;
+        }
+        if (imgui.igButton ("Insert before", ImVec2 {}))
+        {
+            if (selection >= 0 && selection < int (journal.pages.size ()))
+                journal.pages.insert (journal.pages.begin () + selection, page_t {});
+        }
+        imgui.igSameLine (0, -1);
+        if (imgui.igButton ("Insert after", ImVec2 {}))
+        {
+            if (selection >= 0 && selection < int (journal.pages.size ()))
+                journal.pages.insert (journal.pages.begin () + selection + 1, page_t {});
+        }
+        if (imgui.igButton ("Delete", ImVec2 {}))
+        {
+            if (selection >= 0 && selection < int (journal.pages.size ()))
+                journal.pages.erase (journal.pages.begin () + selection);
+        }
     }
     imgui.igEnd ();
     imgui.igPopFont ();
@@ -610,3 +645,41 @@ draw_load ()
 
 //--------------------------------------------------------------------------------------------------
 
+void
+previous_page ()
+{
+    if (journal.current_page > 0)
+        journal.current_page--;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+void
+next_page ()
+{
+    if (journal.current_page+1 < journal.pages.size ())
+        journal.current_page++;
+    // New page if not whitespaces only. It is a bit heurestic and must be careful with regard to
+    // the UTF-8 symbols, hence bare safe assumptions were made in the ASCII range. It helps avoid
+    // including some sophisticated library for handling unicode. While the Viner font provides
+    // very few symbols, merging within an icon font or other utf-8 rich one, will cause issues if
+    // not cautious.
+    else if (journal.current_page + 1 == journal.pages.size ())
+    {
+        auto visible_symbols = [] (std::string const& str)
+        {
+            for (const char* p = str.c_str (); p; ++p)
+                if (*p != ' ' && !std::iscntrl (*p))
+                    return true;
+            return false;
+        };
+        if (!visible_symbols (journal.pages.back ().title)
+                && !visible_symbols (journal.pages.back ().content))
+        {
+            journal.pages.push_back (page_t {});
+            journal.current_page++;
+        }
+    }
+}
+
+//--------------------------------------------------------------------------------------------------

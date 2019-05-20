@@ -27,6 +27,7 @@
 
 #include "sse-journal.hpp"
 
+#include <rapidxml/rapidxml.hpp>
 
 #include <fstream>
 #include <vector>
@@ -296,7 +297,54 @@ load_settings (std::string const& source)
 bool
 load_takenotes (std::string const& source)
 {
-    return false;
+    try
+    {
+        std::ifstream fi (source);
+        if (!fi.is_open ())
+        {
+            log () << "Unable to open " << source << " for reading." << std::endl;
+            return false;
+        }
+
+        std::vector<page_t> pages;
+        std::string content {std::istreambuf_iterator<char> (fi),
+                             std::istreambuf_iterator<char> ()};
+
+        using namespace rapidxml;
+        xml_document<> doc;
+        doc.parse<0> (&content[0]);
+        auto fiss = doc.first_node ("fiss");
+        if (!fiss) throw std::runtime_error ("No /fiss node");
+        auto data = fiss->first_node ("Data");
+        if (!data) throw std::runtime_error ("No /fiss/Data node");
+        auto noe = data->first_node ("NumberOfEntries");
+        if (!noe) throw std::runtime_error ("No /fiss/Data/NumberOfEntries node");
+        auto n = std::stoul (noe->value ());
+        for (unsigned long i = 0; i < n; ++i)
+        {
+            auto num = std::to_string (i);
+            auto title = data->first_node (("date" + num).c_str ());
+            if (!title) throw std::runtime_error ("No fiss/Data/date" + n);
+            auto entry = data->first_node (("entry" + num).c_str ());
+            if (!entry) throw std::runtime_error ("No fiss/Data/entry" + n);
+            pages.emplace_back (page_t { title->value (), entry->value () });
+        }
+
+        while (pages.size () < 3)
+        {
+            log () << "Less than two pages. Inserting empty one." << std::endl;
+            pages.emplace_back (page_t { "", "" });
+        }
+
+        journal.pages = std::move (pages);
+        journal.current_page = 0;
+    }
+    catch (std::exception const& ex)
+    {
+        log () << "Unable to load Take Notes XML file: " << ex.what () << std::endl;
+        return false;
+    }
+    return true;
 }
 
 //--------------------------------------------------------------------------------------------------

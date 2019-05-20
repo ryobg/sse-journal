@@ -306,7 +306,6 @@ load_takenotes (std::string const& source)
             return false;
         }
 
-        std::vector<page_t> pages;
         std::string content {std::istreambuf_iterator<char> (fi),
                              std::istreambuf_iterator<char> ()};
 
@@ -319,15 +318,18 @@ load_takenotes (std::string const& source)
         if (!data) throw std::runtime_error ("No /fiss/Data node");
         auto noe = data->first_node ("NumberOfEntries");
         if (!noe) throw std::runtime_error ("No /fiss/Data/NumberOfEntries node");
-        auto n = std::stoul (noe->value ());
-        for (unsigned long i = 0; i < n; ++i)
+        auto n = (int) std::stoul (noe->value ());
+
+        std::vector<page_t> pages (std::max (n, 2));
+        for (int i = 0; i < n; ++i)
         {
             auto num = std::to_string (i);
             auto title = data->first_node (("date" + num).c_str ());
             if (!title) throw std::runtime_error ("No fiss/Data/date" + n);
             auto entry = data->first_node (("entry" + num).c_str ());
             if (!entry) throw std::runtime_error ("No fiss/Data/entry" + n);
-            pages.emplace_back (page_t { title->value (), entry->value () });
+            pages[i].title = title->value ();
+            pages[i].content = entry->value ();
         }
 
         while (pages.size () < 3)

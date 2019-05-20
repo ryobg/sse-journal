@@ -351,9 +351,13 @@ render (int active)
 
 //--------------------------------------------------------------------------------------------------
 
+static std::string greedy_word_wrap (std::string const& source, unsigned width);
+
 void
 draw_settings ()
 {
+    static int wrap_width = 60;
+
     imgui.igPushFont (journal.system_font);
     if (imgui.igBegin ("SSE Journal: Settings", &journal.show_settings, 0))
     {
@@ -381,6 +385,15 @@ draw_settings ()
 
         imgui.igText ("Default font:");
         imgui.igSliderFloat ("Scale", &journal.system_font->Scale, .5f, 2.f, "%.2f", 1);
+
+        imgui.igDummy (ImVec2 { 1, imgui.igGetFrameHeight () });
+        imgui.igText ("Word wrap:");
+        imgui.igDragInt ("Line width", &wrap_width, 1, 40, 160, "%d");
+        if (imgui.igButton ("Wrap", ImVec2 {}))
+        {
+            for (auto& p: journal.pages)
+                p.content = greedy_word_wrap (p.content, 60);
+        }
 
         imgui.igDummy (ImVec2 { 1, imgui.igGetFrameHeight () });
 
@@ -678,3 +691,38 @@ next_page ()
 }
 
 //--------------------------------------------------------------------------------------------------
+
+static std::string
+greedy_word_wrap (std::string const& source, unsigned width)
+{
+    auto n = std::strlen (source.c_str ());
+    std::string out (n, 0);
+
+    for (unsigned i = 0; i < n; )
+    {
+        // copy string until the end of the line is reached
+        for (unsigned c = 1; c <= width; ++c, ++i)
+        {
+            if (i == n)
+                return out;
+            out[i] = source[i];
+            if (source[i] == '\n')
+                c = 1;
+        }
+
+        if (std::isspace (source[i]))
+            out[i++] = '\n';
+        // check for nearest whitespace back in string
+        else for (unsigned k = i; k > 0; --k)
+            if (std::isspace (source[k]))
+            {
+                out[k] = '\n';
+                i = k + 1;
+                break;
+            }
+    }
+    return out;
+}
+
+//--------------------------------------------------------------------------------------------------
+

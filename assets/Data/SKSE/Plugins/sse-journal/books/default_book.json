@@ -1,0 +1,20 @@
+{
+    "current": 0,
+    "pages": {
+        "0": {
+            "content": "",
+            "title": ""
+        },
+        "1": {
+            "content": "",
+            "title": ""
+        }
+    },
+    "size": 2,
+    "version": {
+        "major": 1,
+        "minor": 0,
+        "patch": 0,
+        "timestamp": "2019-05-19T17:19:57.944529+00:00"
+    }
+}

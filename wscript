@@ -73,7 +73,7 @@ def pack (bld):
     shutil.rmtree ("Data", ignore_errors=True)
     dll = APPNAME+".dll"
     root = "Data/SKSE/Plugins/"
-    os.makedirs (root)
+    shutil.copytree ("assets/Data", "Data")
     shutil.copyfile ("out/"+dll, root+dll)
     subprocess.Popen (["x86_64-w64-mingw32-strip", "-g", root+dll]).communicate ()
     subprocess.Popen (["7z", "a", APPNAME+"-"+VERSION+".7z", 'Data']).communicate ()

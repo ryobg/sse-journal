@@ -146,7 +146,7 @@ setup ()
     load_book (default_book); // This one also may not exist
     if (journal.pages.size () < 3)
         journal.pages.resize (2);
-    if (journal.current_page >= journal.pages.size ())
+    if (journal.current_page+2 >= journal.pages.size ())
         journal.current_page = 0;
 
     return true;
@@ -231,8 +231,7 @@ render (int active)
     imgui.igBegin ("SSE Journal", nullptr,
             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar
             | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground);
-    int push_col = 0;
-    imgui.igPushStyleColorU32 (ImGuiCol_FrameBg, 0); ++push_col;
+    imgui.igPushStyleColorU32 (ImGuiCol_FrameBg, 0);
     imgui.igPushStyleVarFloat (ImGuiStyleVar_FrameBorderSize, 0);
 
     auto wpos = button_t::wpos = imgui.igGetWindowPos ();
@@ -245,13 +244,12 @@ render (int active)
     // Ratio, ratio multiplied by pixel size and the absolute positions summed with these
     // are used all below. It may be pulled off as more capsulated and less dublication.
     const float text_width    = .412f * wsz.x;
-    const float text_height   = .784f * wsz.y;
+    const float text_height   = .800f * wsz.y;
 
     const float left_page  = .070f * wsz.x;
     const float right_page = .528f * wsz.x;
-    const float title_top  = .095f * wsz.y;
+    const float title_top  = .090f * wsz.y;
     const float text_top   = .159f * wsz.y;
-    const float status_top = .950f * wsz.y;
 
     // Port/larboard/ladebord
     // Starboard/steobord
@@ -330,19 +328,8 @@ render (int active)
 
     imgui.igPopFont ();
     imgui.igPopStyleColor (5);
-    imgui.igPushFont (journal.text_font);
-    imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.button_color);
-
-    imgui.igSetCursorPos (ImVec2 { left_page, status_top });
-    imgui.igText ("Port status bar goes here");
-    imgui.igSetCursorPos (ImVec2 { right_page, status_top });
-    imgui.igText ("Starboard status bar goes here");
-
-    imgui.igPopFont ();
-    imgui.igPopStyleColor (1);
-
     imgui.igPopStyleVar (1);
-    imgui.igPopStyleColor (push_col);
+    imgui.igPopStyleColor (1);
     imgui.igEnd ();
 
     extern void draw_settings ();
@@ -453,45 +440,79 @@ draw_variables ()
 
 //--------------------------------------------------------------------------------------------------
 
+static bool
+visible_symbols (std::string const& s)
+{
+    if (!s.empty ()) for (auto p = s.c_str (); *p; ++p)
+        if (*p != ' ' && !std::iscntrl (*p))
+            return true;
+    return false;
+}
+
+//--------------------------------------------------------------------------------------------------
+
 bool
 extract_chapter_title (void* data, int idx, const char** out_text)
 {
-    *out_text = journal.pages[idx].title.c_str ();
+    auto const& title = journal.pages[idx].title;
+    if (visible_symbols (title))
+        *out_text = title.c_str ();
+    else
+        *out_text = "(n/a)";
     return true;
 }
 
 void
 draw_chapters ()
 {
+    static float items = 7.25f;
     static int selection = -1;
 
     imgui.igPushFont (journal.system_font);
     if (imgui.igBegin ("SSE Journal: Chapters", &journal.show_chapters, 0))
     {
-        if (imgui.igListBoxFnPtr ("Chapters", &selection, extract_chapter_title, nullptr,
-                int (journal.pages.size ()), -1))
+        if (imgui.igListBoxFnPtr ("##Chapters", &selection, extract_chapter_title, nullptr,
+                int (journal.pages.size ()), items))
         {
             int ndx = selection;
             if (ndx + 1 == int (journal.pages.size ()))
                 ndx--;
             journal.current_page = ndx;
         }
-        if (imgui.igButton ("Insert before", ImVec2 {}))
+
+        imgui.igSameLine (0, -1);
+        imgui.igBeginGroup ();
+        bool adjust = false;
+
+        if (imgui.igButton ("Insert before", ImVec2 {-1, 0}))
         {
             if (selection >= 0 && selection < int (journal.pages.size ()))
+                adjust = true,
                 journal.pages.insert (journal.pages.begin () + selection, page_t {});
         }
-        imgui.igSameLine (0, -1);
-        if (imgui.igButton ("Insert after", ImVec2 {}))
+        if (imgui.igButton ("Insert after", ImVec2 {-1, 0}))
         {
             if (selection >= 0 && selection < int (journal.pages.size ()))
+                adjust = true,
                 journal.pages.insert (journal.pages.begin () + selection + 1, page_t {});
         }
-        if (imgui.igButton ("Delete", ImVec2 {}))
+        if (imgui.igButton ("Delete", ImVec2 {-1, 0}))
         {
             if (selection >= 0 && selection < int (journal.pages.size ()))
+                adjust = true,
                 journal.pages.erase (journal.pages.begin () + selection);
         }
+        imgui.igEndGroup ();
+
+        if (adjust)
+        {
+            if (journal.pages.size () < 2)
+                journal.pages.resize (2);
+            while (journal.current_page+2 > journal.pages.size ())
+                journal.current_page--;
+        }
+
+        items = (imgui.igGetWindowHeight () / imgui.igGetTextLineHeightWithSpacing ()) - 2;
     }
     imgui.igEnd ();
     imgui.igPopFont ();
@@ -509,7 +530,7 @@ draw_saveas ()
     imgui.igPushFont (journal.system_font);
     if (imgui.igBegin ("SSE Journal: Save as file", &journal.show_saveas, 0))
     {
-        imgui.igText ("Storage folder: %s", books_directory);
+        imgui.igText (books_directory);
         imgui_input_text ("Name", name);
         imgui.igCombo ("Type", &typesel, types.data (), int (types.size ()), -1);
         if (imgui.igButton ("Cancel", ImVec2 {}))
@@ -586,6 +607,7 @@ draw_load ()
     static std::array<const char*, 2> filters = { "*.json", "*.xml" };
     static std::vector<std::string> names;
     static bool reload_names = false;
+    static float items = -1;
 
     if (journal.show_load != reload_names)
     {
@@ -596,15 +618,16 @@ draw_load ()
     imgui.igPushFont (journal.system_font);
     if (imgui.igBegin ("SSE Journal: Load", &journal.show_load, 0))
     {
-        imgui.igText ("Storage folder: %s", books_directory);
-        imgui.igListBoxFnPtr (
-                "Names", &namesel, extract_vector_string, &names, int (names.size ()), -1);
-        if (imgui.igCombo ("Type", &typesel, types.data (), int (types.size ()), -1))
+        imgui.igText (books_directory);
+        imgui.igBeginGroup ();
+        if (imgui.igCombo ("##Type", &typesel, types.data (), int (types.size ()), -1))
             enumerate_books (filters[typesel], names);
-        if (imgui.igButton ("Cancel", ImVec2 {}))
-            journal.show_load = false;
+        imgui.igListBoxFnPtr ("##Names",
+                &namesel, extract_vector_string, &names, int (names.size ()), items);
+        imgui.igEndGroup ();
         imgui.igSameLine (0, -1);
-        if (imgui.igButton ("Load", ImVec2 {}) && unsigned (namesel) < names.size ())
+        imgui.igBeginGroup ();
+        if (imgui.igButton ("Load", ImVec2 {-1, 0}) && unsigned (namesel) < names.size ())
         {
             bool ok = true;
             auto target = books_directory + names[namesel];
@@ -613,6 +636,10 @@ draw_load ()
             popup_error (!ok, "Load book failed");
             if (ok) journal.show_load = false;
         }
+        if (imgui.igButton ("Cancel", ImVec2 {-1, 0}))
+            journal.show_load = false;
+        imgui.igEndGroup ();
+        items = (imgui.igGetWindowHeight () / imgui.igGetTextLineHeightWithSpacing ()) - 4;
     }
     imgui.igEnd ();
     imgui.igPopFont ();
@@ -632,24 +659,17 @@ previous_page ()
 void
 next_page ()
 {
-    if (journal.current_page+1 < journal.pages.size ())
+    if (journal.current_page+2 < journal.pages.size ())
         journal.current_page++;
     // New page if not whitespaces only. It is a bit heurestic and must be careful with regard to
     // the UTF-8 symbols, hence bare safe assumptions were made in the ASCII range. It helps avoid
     // including some sophisticated library for handling unicode. While the Viner font provides
     // very few symbols, merging within an icon font or other utf-8 rich one, will cause issues if
     // not cautious.
-    else if (journal.current_page + 1 == journal.pages.size ())
+    else if (journal.current_page + 2 == journal.pages.size ())
     {
-        auto visible_symbols = [] (std::string const& str)
-        {
-            for (const char* p = str.c_str (); p; ++p)
-                if (*p != ' ' && !std::iscntrl (*p))
-                    return true;
-            return false;
-        };
-        if (!visible_symbols (journal.pages.back ().title)
-                && !visible_symbols (journal.pages.back ().content))
+        if (visible_symbols (journal.pages.back ().title)
+                || visible_symbols (journal.pages.back ().content))
         {
             journal.pages.push_back (page_t {});
             journal.current_page++;

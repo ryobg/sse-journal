@@ -172,10 +172,10 @@ load_book (std::string const& source)
             journal.pages.emplace_back (page_t {
                     std::move (kv.second.title), std::move (kv.second.content) });
 
-        while (journal.pages.size () < 3)
+        while (journal.pages.size () < 2)
         {
             log () << "Less than two pages. Inserting empty one." << std::endl;
-            journal.pages.emplace_back (page_t { "", "" });
+            journal.pages.emplace_back (page_t {});
         }
 
         if (current >= journal.pages.size ())
@@ -323,19 +323,19 @@ load_takenotes (std::string const& source)
         std::vector<page_t> pages (std::max (n, 2));
         for (int i = 0; i < n; ++i)
         {
-            auto num = std::to_string (i);
+            auto num = std::to_string (i+1);
             auto title = data->first_node (("date" + num).c_str ());
-            if (!title) throw std::runtime_error ("No fiss/Data/date" + n);
+            if (!title) continue; // Turns out there can be holes
             auto entry = data->first_node (("entry" + num).c_str ());
-            if (!entry) throw std::runtime_error ("No fiss/Data/entry" + n);
+            if (!entry) continue;
             pages[i].title = title->value ();
             pages[i].content = entry->value ();
         }
 
-        while (pages.size () < 3)
+        while (pages.size () < 2)
         {
             log () << "Less than two pages. Inserting empty one." << std::endl;
-            pages.emplace_back (page_t { "", "" });
+            pages.emplace_back (page_t {});
         }
 
         journal.pages = std::move (pages);

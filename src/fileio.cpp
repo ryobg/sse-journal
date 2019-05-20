@@ -27,6 +27,7 @@
 
 #include "sse-journal.hpp"
 
+
 #include <fstream>
 #include <vector>
 
@@ -48,7 +49,6 @@ save_text (std::string const& destination)
     const char* timestamp;
     journal_version (&maj, &min, &patch, &timestamp);
 
-    extern std::string local_time (const char* format);
     try
     {
         std::ofstream of (destination);
@@ -195,15 +195,7 @@ load_book (std::string const& source)
 //--------------------------------------------------------------------------------------------------
 
 bool
-load_takenotes (std::string const& source)
-{
-    return false;
-}
-
-//--------------------------------------------------------------------------------------------------
-
-bool
-save_settings ()
+save_settings (std::string const& destination)
 {
     int maj, min, patch;
     const char* timestamp;
@@ -235,10 +227,10 @@ save_settings ()
             }}
         };
 
-        std::ofstream of (settings_location);
+        std::ofstream of (destination);
         if (!of.is_open ())
         {
-            log () << "Unable to open " << settings_location << " for writting." << std::endl;
+            log () << "Unable to open " << destination << " for writting." << std::endl;
             return false;
         }
 
@@ -255,17 +247,17 @@ save_settings ()
 //--------------------------------------------------------------------------------------------------
 
 bool
-load_settings ()
+load_settings (std::string const& source)
 {
     int maj;
     journal_version (&maj, nullptr, nullptr, nullptr);
 
     try
     {
-        std::ifstream fi (settings_location);
+        std::ifstream fi (source);
         if (!fi.is_open ())
         {
-            log () << "Unable to open " << settings_location << " for reading." << std::endl;
+            log () << "Unable to open " << source << " for reading." << std::endl;
             return false;
         }
 
@@ -297,6 +289,14 @@ load_settings ()
         return false;
     }
     return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+bool
+load_takenotes (std::string const& source)
+{
+    return false;
 }
 
 //--------------------------------------------------------------------------------------------------

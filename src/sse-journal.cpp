@@ -1,6 +1,6 @@
 /**
  * @file sse-journal.cpp
- * @brief Main functionality for SSE Journal
+ * @brief User interface management
  * @internal
  *
  * This file is part of Skyrim SE Journal mod (aka Journal).
@@ -27,19 +27,10 @@
 
 #include "sse-journal.hpp"
 
-#include <sse-imgui/sse-imgui.h>
-#include <sse-gui/sse-gui.h>
-#include <utils/winutils.hpp>
 
-#include <fstream>
-#include <map>
-#include <vector>
-#include <memory>
-#include <string>
 #include <cstring>
-#include <functional>
 
-#include <d3d11.h>
+// SSE-ImGui candidate
 #include <DDSTextureLoader/DDSTextureLoader.h>
 
 //--------------------------------------------------------------------------------------------------
@@ -58,78 +49,18 @@
 
 //--------------------------------------------------------------------------------------------------
 
-/// Defined in skse.cpp
-extern imgui_api imgui;
-
-/// Defined in skse.cpp
-extern std::unique_ptr<ssegui_api> ssegui;
-
 auto constexpr lite_tint = IM_COL32 (191, 157, 111,  64);
 auto constexpr dark_tint = IM_COL32 (191, 157, 111,  96);
 auto constexpr frame_col = IM_COL32 (192, 157, 111, 192);
 
-static const char* plugin_directory  = "Data\\SKSE\\Plugins\\sse-journal";
 static const wchar_t* background_dds =L"Data\\SKSE\\Plugins\\sse-journal\\book.dds";
 static const char* settings_location = "Data\\SKSE\\Plugins\\sse-journal\\settings.json";
 static const char* books_directory   = "Data\\SKSE\\Plugins\\sse-journal\\books\\";
 static const char* default_book      = "Data\\SKSE\\Plugins\\sse-journal\\books\\default_book.json";
 
-/// Defined in skse.cpp
-extern std::string logfile_path;
+journal_t journal = {};
 
 //--------------------------------------------------------------------------------------------------
-
-/// Wraps up common logic for drawing a button, uses shared state across the instances
-class button_t
-{
-    ImVec2 tl, sz, align;
-    const char *label, *label_end;
-    std::uint32_t hover_tint;
-public:
-    static ImFont* font;
-    static std::uint32_t* color;
-    static ID3D11ShaderResourceView* background;
-
-    static ImVec2 wpos, wsz; ///< Updated on each frame
-
-    button_t () : label (nullptr), label_end (nullptr) {}
-    button_t (const char* label,
-            float tlx, float tly, float szx, float szy,
-            std::uint32_t hover, float ax = .5f, float ay = .5f)
-    {
-        this->align = ImVec2 { ax, ay };
-        this->label = label;
-        label_end = std::strchr (label, '#');
-        tl.x = tlx, tl.y = tly, sz.x = szx, sz.y = szy;
-        hover_tint = hover;
-    }
-
-    bool draw ()
-    {
-        imgui.igPushFont (font);
-        imgui.igPushStyleColorU32 (ImGuiCol_Text, *color);
-        ImVec2 ptl { wsz.x * tl.x, wsz.y * tl.y },
-               psz { wsz.x * sz.x, wsz.y * sz.y };
-        imgui.igSetCursorPos (ptl);
-        bool pressed = imgui.igInvisibleButton (label, psz);
-        bool hovered = imgui.igIsItemHovered (0);
-        if (hovered)
-        {
-            constexpr float vmax = .7226f; // The Background Y pixels reach ~72% of a 2k texture
-            imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), background,
-                ImVec2 { wpos.x + ptl.x,         wpos.y + ptl.y         },
-                ImVec2 { wpos.x + ptl.x + psz.x, wpos.y + ptl.y + psz.y },
-                ImVec2 { tl.x, tl.y*vmax }, ImVec2 { tl.x + sz.x, (tl.y + sz.y)*vmax }, hover_tint);
-        }
-        auto txtsz = imgui.igCalcTextSize (label, label_end, false, -1.f);
-        imgui.igSetCursorPos (ImVec2 { ptl.x + align.x * (psz.x - txtsz.x),
-                                       ptl.y + align.y * (psz.y - txtsz.y) });
-        imgui.igTextUnformatted (label, label_end);
-        imgui.igPopFont ();
-        imgui.igPopStyleColor (1);
-        return pressed;
-    }
-};
 
 ImFont* button_t::font = nullptr;
 std::uint32_t* button_t::color = nullptr;
@@ -137,38 +68,43 @@ ID3D11ShaderResourceView* button_t::background = nullptr;
 ImVec2 button_t::wpos = {};
 ImVec2 button_t::wsz = {};
 
-//--------------------------------------------------------------------------------------------------
-
-struct page_t
+void button_t::init (
+        const char* label,
+        float tlx, float tly, float szx, float szy,
+        std::uint32_t hover, float ax, float ay)
 {
-    std::string title, content;
-};
-
-//--------------------------------------------------------------------------------------------------
-
-/// State of the current Journal run
-struct {
-    ID3D11Device*           device;
-    ID3D11DeviceContext*    context;
-    IDXGISwapChain*         chain;
-    HWND                    window;
-
-    ID3D11ShaderResourceView* background;
-
-    ImFont *button_font, *chapter_font, *text_font, *system_font;
-    std::uint32_t button_color, chapter_color, text_color;
-
-    button_t button_prev, button_next,
-             button_settings, button_variables, button_chapters,
-             button_save, button_saveas, button_load;
-    bool show_settings, show_variables, show_chapters, show_saveas, show_load;
-
-    std::vector<std::pair<std::string, std::function<std::string ()>>> variables;
-
-    std::vector<page_t> pages;
-    unsigned current_page;
+    this->align = ImVec2 { ax, ay };
+    this->label = label;
+    label_end = std::strchr (label, '#');
+    tl.x = tlx, tl.y = tly, sz.x = szx, sz.y = szy;
+    hover_tint = hover;
 }
-journal = {};
+
+bool button_t::draw ()
+{
+    imgui.igPushFont (font);
+    imgui.igPushStyleColorU32 (ImGuiCol_Text, *color);
+    ImVec2 ptl { wsz.x * tl.x, wsz.y * tl.y },
+           psz { wsz.x * sz.x, wsz.y * sz.y };
+    imgui.igSetCursorPos (ptl);
+    bool pressed = imgui.igInvisibleButton (label, psz);
+    bool hovered = imgui.igIsItemHovered (0);
+    if (hovered)
+    {
+        constexpr float vmax = .7226f; // The Background Y pixels reach ~72% of a 2k texture
+        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), background,
+            ImVec2 { wpos.x + ptl.x,         wpos.y + ptl.y         },
+            ImVec2 { wpos.x + ptl.x + psz.x, wpos.y + ptl.y + psz.y },
+            ImVec2 { tl.x, tl.y*vmax }, ImVec2 { tl.x + sz.x, (tl.y + sz.y)*vmax }, hover_tint);
+    }
+    auto txtsz = imgui.igCalcTextSize (label, label_end, false, -1.f);
+    imgui.igSetCursorPos (ImVec2 { ptl.x + align.x * (psz.x - txtsz.x),
+                                   ptl.y + align.y * (psz.y - txtsz.y) });
+    imgui.igTextUnformatted (label, label_end);
+    imgui.igPopFont ();
+    imgui.igPopStyleColor (1);
+    return pressed;
+}
 
 //--------------------------------------------------------------------------------------------------
 
@@ -217,19 +153,18 @@ setup ()
     button_t::color = &journal.button_color;
     button_t::background = journal.background;
     auto& j = journal;
-    j.button_prev      = button_t ("Prev##B"     ,   0.f, 0, .050f,   1.f, lite_tint);
-    j.button_settings  = button_t ("Settings##B" , .070f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    j.button_variables = button_t ("Variables##B", .212f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    j.button_chapters  = button_t ("Chapters##B" , .354f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    j.button_save      = button_t ("Save##B"     , .528f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    j.button_saveas    = button_t ("Save As##B"  , .670f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    j.button_load      = button_t ("Load##B"     , .812f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    j.button_next      = button_t ("Next##B"     ,  .95f, 0, .050f,   1.f, lite_tint);
+    j.button_prev     .init ("Prev##B"     ,   0.f, 0, .050f,   1.f, lite_tint);
+    j.button_settings .init ("Settings##B" , .070f, 0, .128f, .060f, dark_tint, .5f, .85f);
+    j.button_variables.init ("Variables##B", .212f, 0, .128f, .060f, dark_tint, .5f, .85f);
+    j.button_chapters .init ("Chapters##B" , .354f, 0, .128f, .060f, dark_tint, .5f, .85f);
+    j.button_save     .init ("Save##B"     , .528f, 0, .128f, .060f, dark_tint, .5f, .85f);
+    j.button_saveas   .init ("Save As##B"  , .670f, 0, .128f, .060f, dark_tint, .5f, .85f);
+    j.button_load     .init ("Load##B"     , .812f, 0, .128f, .060f, dark_tint, .5f, .85f);
+    j.button_next     .init ("Next##B"     ,  .95f, 0, .050f,   1.f, lite_tint);
 
-    extern std::vector<std::pair<std::string, std::function<std::string ()>>> make_variables ();
     journal.variables = make_variables ();
 
-    load_settings (); // File may not exist yet
+    load_settings (settings_location); // File may not exist yet
 
     // Fun experiment: ~half a second to load/save 1000 pages with 40k symbols each.
     // This is like ~40MB file, or something like 40 fat books of 500 pages each one. Should be
@@ -487,14 +422,14 @@ draw_settings ()
 
         bool save_ok = true;
         if (imgui.igButton ("Save settings", ImVec2 {}))
-            save_ok = save_settings ();
+            save_ok = save_settings (settings_location);
         popup_error (!save_ok, "Saving settings failed");
 
         imgui.igSameLine (0, -1);
 
         bool load_ok = true;
         if (imgui.igButton ("Load settings", ImVec2 {}))
-            load_ok = load_settings ();
+            load_ok = load_settings (settings_location);
         popup_error (!load_ok, "Loading settings failed");
     }
     imgui.igEnd ();

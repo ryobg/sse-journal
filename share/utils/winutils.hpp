@@ -34,7 +34,10 @@
 #include <array>
 #include <algorithm>
 
+#ifndef NTDDI_VERSION
 #define NTDDI_VERSION NTDDI_VISTA // Default is NT, cross finger ppl dont use WinXP to play Skyrim
+#endif
+
 #include <windows.h>
 #include <shlobj.h>
 #include <initguid.h>

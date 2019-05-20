@@ -29,7 +29,6 @@
 #define SSEJOURNAL_HPP
 
 #include <sse-imgui/sse-imgui.h>
-#include <sse-gui/sse-gui.h>
 #include <utils/winutils.hpp>
 
 #include <d3d11.h>
@@ -51,7 +50,7 @@ extern std::ofstream& log ();
 extern std::string logfile_path;
 
 extern imgui_api imgui;
-extern std::unique_ptr<ssegui_api> ssegui;
+extern std::unique_ptr<sseimgui_api> sseimgui;
 
 //--------------------------------------------------------------------------------------------------
 
@@ -107,11 +106,6 @@ struct page_t
 /// Most important stuff for the current running instance
 struct journal_t
 {
-    ID3D11Device*           device;
-    ID3D11DeviceContext*    context;
-    IDXGISwapChain*         chain;
-    HWND                    window;
-
     ID3D11ShaderResourceView* background;
 
     ImFont *button_font, *chapter_font, *text_font, *system_font;

@@ -49,11 +49,8 @@ static SKSEMessagingInterface* messages = nullptr;
 /// Log file in pre-defined location
 static std::ofstream logfile;
 
-/// Local initialization
-static std::unique_ptr<sseimgui_api> sseimgui;
-
-/// [shared] In order to hook upon D3D11
-std::unique_ptr<ssegui_api> ssegui;
+/// [shared] Local initialization
+std::unique_ptr<sseimgui_api> sseimgui;
 
 /// [shared] Table with pointers
 imgui_api imgui;
@@ -126,27 +123,6 @@ handle_sseimgui_message (SKSEMessagingInterface::Message* m)
     sseimgui.reset (new sseimgui_api (*reinterpret_cast<sseimgui_api*> (m->data)));
     imgui = sseimgui->make_imgui_api ();
     log () << "Accepted SSEIMGUI interface v" << SSEIMGUI_API_VERSION << std::endl;
-}
-
-//--------------------------------------------------------------------------------------------------
-
-/// This is somewhere in SKSE Input Loaded message, before sse-imgui
-
-static void
-handle_ssegui_message (SKSEMessagingInterface::Message* m)
-{
-    if (!sseimgui)
-        return;
-
-    if (m->type != SSEGUI_API_VERSION)
-    {
-        log () << "Unsupported SSEGUI interface v" << m->type
-               << " (it is not v" << SSEGUI_API_VERSION
-               << "). Bailing out." << std::endl;
-        return;
-    }
-    ssegui.reset (new ssegui_api (*reinterpret_cast<ssegui_api*> (m->data)));
-    log () << "Accepted SSEGUI interface v" << SSEGUI_API_VERSION << std::endl;
 
     extern bool setup ();
     if (!setup ())
@@ -161,7 +137,7 @@ handle_ssegui_message (SKSEMessagingInterface::Message* m)
 
 //--------------------------------------------------------------------------------------------------
 
-/// Post Load ensure SSEIMGUI is loaded and can accept listeners
+/// Post Load ensure SSE-ImGui is loaded and can accept listeners
 
 static void
 handle_skse_message (SKSEMessagingInterface::Message* m)
@@ -169,7 +145,6 @@ handle_skse_message (SKSEMessagingInterface::Message* m)
     if (m->type != SKSEMessagingInterface::kMessage_PostLoad)
         return;
     log () << "SKSE Post Load." << std::endl;
-    messages->RegisterListener (plugin, "SSEGUI", handle_ssegui_message);
     messages->RegisterListener (plugin, "SSEIMGUI", handle_sseimgui_message);
 }
 

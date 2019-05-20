@@ -33,25 +33,11 @@
 
 //--------------------------------------------------------------------------------------------------
 
-// SSE-ImGui candidates
-
-#define IM_COL32_R_SHIFT    0
-#define IM_COL32_G_SHIFT    8
-#define IM_COL32_B_SHIFT    16
-#define IM_COL32_A_SHIFT    24
-#define IM_COL32_A_MASK     0xFF000000
-#define IM_COL32(R,G,B,A) (((ImU32)(A)<<IM_COL32_A_SHIFT) | ((ImU32)(B)<<IM_COL32_B_SHIFT) | ((ImU32)(G)<<IM_COL32_G_SHIFT) | ((ImU32)(R)<<IM_COL32_R_SHIFT))
-#define IM_COL32_WHITE       IM_COL32(255,255,255,255)  // Opaque white = 0xFFFFFFFF
-#define IM_COL32_BLACK       IM_COL32(0,0,0,255)        // Opaque black
-#define IM_COL32_BLACK_TRANS IM_COL32(0,0,0,0)          // Transparent black = 0x00000000
-
-//--------------------------------------------------------------------------------------------------
-
 auto constexpr lite_tint = IM_COL32 (191, 157, 111,  64);
 auto constexpr dark_tint = IM_COL32 (191, 157, 111,  96);
 auto constexpr frame_col = IM_COL32 (192, 157, 111, 192);
 
-static const wchar_t* background_dds =L"Data\\SKSE\\Plugins\\sse-journal\\book.dds";
+static const char* background_dds    = "Data\\SKSE\\Plugins\\sse-journal\\book.dds";
 static const char* settings_location = "Data\\SKSE\\Plugins\\sse-journal\\settings.json";
 static const char* books_directory   = "Data\\SKSE\\Plugins\\sse-journal\\books\\";
 static const char* default_book      = "Data\\SKSE\\Plugins\\sse-journal\\books\\default_book.json";
@@ -109,19 +95,8 @@ bool button_t::draw ()
 bool
 setup ()
 {
-    if (!ssegui->parameter ("ID3D11Device", &journal.device)
-            || !ssegui->parameter ("ID3D11DeviceContext", &journal.context)
-            || !ssegui->parameter ("IDXGISwapChain", &journal.chain)
-            || !ssegui->parameter ("window", &journal.window)
-            )
-    {
-        log () << "Unable to fetch SSE GUI parameters." << std::endl;
-        return false;
-    }
-
     // This is good candidate to offload to SSE ImGui or SSE-GUI
-    if (FAILED (DirectX::CreateDDSTextureFromFile (
-                    journal.device, journal.context, background_dds, nullptr, &journal.background)))
+    if (!sseimgui->ddsfile_texture (background_dds, nullptr, &journal.background))
     {
         log () << "Unable to load DDS." << std::endl;
         return false;

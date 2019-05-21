@@ -188,7 +188,7 @@ bool
 imgui_input_text (const char* label, std::string& text)
 {
     return imgui.igInputText (
-            label, const_cast<char*> (text.c_str ()), text.size (),
+            label, const_cast<char*> (text.c_str ()), text.size () + 1,
             ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
 }
 
@@ -197,7 +197,7 @@ bool
 imgui_input_multiline (const char* label, std::string& text, ImVec2 const& size)
 {
     return imgui.igInputTextMultiline (
-            label, const_cast<char*> (text.c_str ()), text.size (),
+            label, const_cast<char*> (text.c_str ()), text.size () + 1,
             size, ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
 }
 

@@ -226,6 +226,8 @@ render (int active)
     if (!active)
         return;
 
+    imgui.igSetNextWindowSize (ImVec2 { 800, 600 }, ImGuiCond_FirstUseEver);
+
     imgui.igBegin ("SSE Journal", nullptr,
             ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar
             | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground);

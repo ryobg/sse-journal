@@ -280,6 +280,11 @@ load_font (nlohmann::json const& json, font_t& font)
     }
     else if (font.glyphs.size ())
     {
+        if (font.glyphs == "all")
+        {
+            static ImWchar buff[3] = { 0, 0xFFFF, 0 };
+            ranges = buff;
+        }
         if (font.glyphs == "korean")
             ranges = imgui.ImFontAtlas_GetGlyphRangesKorean (font_atlas);
         if (font.glyphs == "japanase")

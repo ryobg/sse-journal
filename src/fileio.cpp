@@ -28,6 +28,7 @@
 #include "sse-journal.hpp"
 
 #include <rapidxml/rapidxml.hpp>
+#include <gsl/gsl_util>
 
 #include <fstream>
 #include <vector>
@@ -217,7 +218,7 @@ save_font (nlohmann::json& json, font_t const& font)
 //--------------------------------------------------------------------------------------------------
 
 bool
-save_settings (std::string const& destination)
+save_settings ()
 {
     int maj, min, patch;
     const char* timestamp;
@@ -240,10 +241,10 @@ save_settings (std::string const& destination)
         save_font (json, journal.button_font);
         save_font (json, journal.default_font);
 
-        std::ofstream of (destination);
+        std::ofstream of (settings_location);
         if (!of.is_open ())
         {
-            log () << "Unable to open " << destination << " for writting." << std::endl;
+            log () << "Unable to open " << settings_location << " for writting." << std::endl;
             return false;
         }
 
@@ -262,16 +263,29 @@ save_settings (std::string const& destination)
 static void
 load_font (nlohmann::json const& json, font_t& font)
 {
-    auto font_atlas = imgui.igGetIO ()->Fonts;
-    auto const& jf = json.at (font.name + " font");
+    std::string section = font.name + " font";
+    nlohmann::json jf;
+    if (json.contains (section))
+        jf = json[section];
+    else jf = nlohmann::json::object ();
 
     font.color = std::stoull (jf.value ("color", hex_string (font.color)), nullptr, 0);
     font.scale = jf.value ("scale", font.scale);
-    font.size = jf.value ("size", font.size);
-    font.file = jf.value ("file", journal_directory + font.name + ".ttf");
-    font.glyphs = jf.value ("glyphs", font.glyphs);
-    font.ranges = jf.value ("ranges", std::vector<ImWchar> ());
+    auto set_scale = gsl::finally ([&font] { font.imfont->Scale = font.scale; });
 
+    // The UI load button, otherwise we have to recreate all fonts outside the rendering loop
+    // and thats too much of hassle if not tuning all other params through the UI too.
+    if (font.imfont)
+        return;
+
+    font.size = jf.value ("size", font.size);
+    font.glyphs = jf.value ("glyphs", font.glyphs);
+    font.file = jf.value ("file", journal_directory + font.name + ".ttf");
+    if (font.file.empty ())
+        font.file = journal_directory + font.name + ".ttf";
+    font.ranges = jf.value ("ranges", std::vector<ImWchar> {});
+
+    auto font_atlas = imgui.igGetIO ()->Fonts;
     ImWchar const* ranges = nullptr;
     if (font.ranges.size ())
     {
@@ -282,7 +296,7 @@ load_font (nlohmann::json const& json, font_t& font)
     {
         if (font.glyphs == "all")
         {
-            static ImWchar buff[3] = { 0, 0xFFFF, 0 };
+            static const ImWchar buff[] = { 0x0020, 0xFFEF, 0 }; // This one is tricky to avoid CDT
             ranges = buff;
         }
         if (font.glyphs == "korean")
@@ -301,7 +315,6 @@ load_font (nlohmann::json const& json, font_t& font)
             ranges = imgui.ImFontAtlas_GetGlyphRangesVietnamese (font_atlas);
     }
 
-    font.imfont = nullptr;
     if (file_exists (font.file))
         font.imfont = imgui.ImFontAtlas_AddFontFromFileTTF (
                 font_atlas, font.file.c_str (), font.size, nullptr, ranges);
@@ -316,27 +329,28 @@ load_font (nlohmann::json const& json, font_t& font)
 //--------------------------------------------------------------------------------------------------
 
 bool
-load_settings (std::string const& source)
+load_settings ()
 {
     int maj;
     journal_version (&maj, nullptr, nullptr, nullptr);
 
     try
     {
-        std::ifstream fi (source);
+        nlohmann::json json;
+
+        std::ifstream fi (settings_location);
         if (!fi.is_open ())
         {
-            log () << "Unable to open " << source << " for reading." << std::endl;
-            return false;
+            log () << "Unable to open " << settings_location << " for reading." << std::endl;
         }
-
-        nlohmann::json json;
-        fi >> json;
-
-        if (json["version"]["major"].get<int> () != maj)
+        else
         {
-            log () << "Incompatible settings file." << std::endl;
-            return false;
+            fi >> json;
+            if (json["version"]["major"].get<int> () != maj)
+            {
+                log () << "Incompatible settings file." << std::endl;
+                return false;
+            }
         }
 
         extern const char* font_viner_hand;
@@ -346,6 +360,9 @@ load_settings (std::string const& source)
         journal.button_font.scale = 1.f;
         journal.button_font.size = 36.f;
         journal.button_font.color = IM_COL32_WHITE;
+        journal.button_font.file = "";
+        journal.button_font.glyphs = "all";
+        journal.button_font.ranges = {};
         journal.button_font.default_data = font_viner_hand;
         load_font (json, journal.button_font);
 
@@ -354,6 +371,9 @@ load_settings (std::string const& source)
         journal.chapter_font.scale = 1.f;
         journal.chapter_font.size = 54.f;
         journal.chapter_font.color = IM_COL32_BLACK;
+        journal.chapter_font.file = "";
+        journal.chapter_font.glyphs = "all";
+        journal.chapter_font.ranges = {};
         journal.chapter_font.default_data = font_viner_hand;
         load_font (json, journal.chapter_font);
 
@@ -362,25 +382,29 @@ load_settings (std::string const& source)
         journal.text_font.scale = 1.f;
         journal.text_font.size = 36.f;
         journal.text_font.color = IM_COL32 (21, 17, 12, 255);
+        journal.text_font.file = "";
+        journal.text_font.glyphs = "all";
+        journal.text_font.ranges = {};
         journal.text_font.default_data = font_viner_hand;
         load_font (json, journal.text_font);
 
-        journal.default_font.name = "default";
+        journal.default_font.name = "system";
         journal.default_font.scale = 1.f;
         journal.default_font.size = 18.f;
         journal.default_font.color = IM_COL32_WHITE;
+        journal.default_font.file = "";
+        journal.default_font.glyphs = "all";
+        journal.default_font.ranges = {};
         journal.default_font.default_data = font_inconsolata;
         load_font (json, journal.default_font);
 
+        journal.background_file = journal_directory + "book.dds";
         if (json.contains ("background"))
-        {
-            journal.background_file = json["background"]
-                .value ("file", journal_directory + "book.dds");
-        }
+            journal.background_file = json["background"].value ("file", journal.background_file);
     }
     catch (std::exception const& ex)
     {
-        log () << "Unable to save settings file: " << ex.what () << std::endl;
+        log () << "Unable to load settings file: " << ex.what () << std::endl;
         return false;
     }
     return true;

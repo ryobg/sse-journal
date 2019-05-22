@@ -64,9 +64,9 @@ extern std::string default_book;
 bool save_text (std::string const& destination);
 bool save_book (std::string const& destination);
 bool load_book (std::string const& source);
-bool save_settings (std::string const& destination);
-bool load_settings (std::string const& source);
 bool load_takenotes (std::string const& source);
+bool save_settings ();
+bool load_settings ();
 
 extern std::string journal_directory;
 extern std::string books_directory;
@@ -111,12 +111,12 @@ struct font_t
     std::string name;
     float scale;
     float size;
-    std::uint32_t color;
+    std::uint32_t color;    ///< Only this is tuned by the UI, rest are default init only
     std::string file;
-    std::string glyphs; ///< Predefined names (mostly taken from ImGui)
-    std::vector<ImWchar> ranges; ///< Custom pairs of ranges for glyphs, terminated by single 0
+    std::string glyphs;
+    std::vector<ImWchar> ranges;
     const char* default_data;
-    ImFont* imfont; ///< Params may be out of sync with *this, until #save_settings()
+    ImFont* imfont; ///< Actual font with its settings (apart from #color)
 };
 
 //--------------------------------------------------------------------------------------------------

@@ -85,7 +85,7 @@ bool button_t::draw ()
 bool
 setup ()
 {
-    load_settings (settings_location); // File may not exist yet
+    load_settings (); // File may not exist yet
 
     if (!sseimgui->ddsfile_texture (journal.background_file.c_str (), nullptr, &journal.background))
     {
@@ -366,14 +366,14 @@ draw_settings ()
 
         bool save_ok = true;
         if (imgui.igButton ("Save settings", ImVec2 {}))
-            save_ok = save_settings (settings_location);
+            save_ok = save_settings ();
         popup_error (!save_ok, "Saving settings failed");
 
         imgui.igSameLine (0, -1);
 
         bool load_ok = true;
         if (imgui.igButton ("Load settings", ImVec2 {}))
-            load_ok = load_settings (settings_location);
+            load_ok = load_settings ();
         popup_error (!load_ok, "Loading settings failed");
     }
     imgui.igEnd ();

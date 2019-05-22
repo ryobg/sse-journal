@@ -27,6 +27,7 @@
 
 #include <sse-imgui/sse-imgui.h>
 #include <sse-gui/sse-gui.h>
+#include <sse-hooks/sse-hooks.h>
 #include <utils/winutils.hpp>
 
 #include <fstream>
@@ -50,10 +51,13 @@ static SKSEMessagingInterface* messages = nullptr;
 static std::ofstream logfile;
 
 /// [shared] Local initialization
-std::unique_ptr<sseimgui_api> sseimgui;
+sseimgui_api sseimgui = {};
+
+/// [shared] Local initialization
+sseh_api sseh = {};
 
 /// [shared] Table with pointers
-imgui_api imgui;
+imgui_api imgui = {};
 
 /// [shared] Reports current log file path (for user friendly messages)
 std::string logfile_path;
@@ -120,17 +124,17 @@ handle_sseimgui_message (SKSEMessagingInterface::Message* m)
         return;
     }
 
-    sseimgui.reset (new sseimgui_api (*reinterpret_cast<sseimgui_api*> (m->data)));
+    sseimgui = *reinterpret_cast<sseimgui_api*> (m->data);
 
     int maj;
-    sseimgui->version (nullptr, &maj, nullptr, nullptr);
+    sseimgui.version (nullptr, &maj, nullptr, nullptr);
     if (maj < 1)
     {
         log () << "SSE-Journal needs SSE-ImGui 1.1 or later." << std::endl;
         return;
     }
 
-    imgui = sseimgui->make_imgui_api ();
+    imgui = sseimgui.make_imgui_api ();
     log () << "Accepted SSEIMGUI interface v" << SSEIMGUI_API_VERSION << std::endl;
 
     extern bool setup ();
@@ -140,8 +144,24 @@ handle_sseimgui_message (SKSEMessagingInterface::Message* m)
         return;
     }
 
-    extern void render (int); sseimgui->render_listener (&render, 0);
+    extern void render (int); sseimgui.render_listener (&render, 0);
     log () << "All done." << std::endl;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+static void
+handle_sseh_message (SKSEMessagingInterface::Message* m)
+{
+    if (m->type != SSEH_API_VERSION)
+    {
+        log () << "Unsupported SSEH interface v" << m->type
+               << " (it is not v" << SSEH_API_VERSION
+                << "). Bailing out." << std::endl;
+        return;
+    }
+
+    sseh = *reinterpret_cast<sseh_api*> (m->data);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -154,6 +174,7 @@ handle_skse_message (SKSEMessagingInterface::Message* m)
     if (m->type != SKSEMessagingInterface::kMessage_PostLoad)
         return;
     log () << "SKSE Post Load." << std::endl;
+    messages->RegisterListener (plugin, "SSEH", handle_sseh_message);
     messages->RegisterListener (plugin, "SSEIMGUI", handle_sseimgui_message);
 }
 

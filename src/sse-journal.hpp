@@ -50,7 +50,7 @@ extern std::ofstream& log ();
 extern std::string logfile_path;
 
 extern imgui_api imgui;
-extern std::unique_ptr<sseimgui_api> sseimgui;
+extern sseimgui_api sseimgui;
 
 extern std::string journal_directory;
 extern std::string books_directory;

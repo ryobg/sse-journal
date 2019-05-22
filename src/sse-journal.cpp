@@ -87,7 +87,7 @@ setup ()
 {
     load_settings (); // File may not exist yet
 
-    if (!sseimgui->ddsfile_texture (journal.background_file.c_str (), nullptr, &journal.background))
+    if (!sseimgui.ddsfile_texture (journal.background_file.c_str (), nullptr, &journal.background))
     {
         log () << "Unable to load DDS." << std::endl;
         return false;

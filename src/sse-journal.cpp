@@ -324,8 +324,6 @@ static std::string greedy_word_wrap (std::string const& source, unsigned width);
 void
 draw_settings ()
 {
-    static int wrap_width = 60;
-
     imgui.igPushFont (journal.system_font.imfont);
     if (imgui.igBegin ("SSE Journal: Settings", &journal.show_settings, 0))
     {
@@ -354,13 +352,14 @@ draw_settings ()
         imgui.igText ("Default font:");
         imgui.igSliderFloat ("Scale", &journal.system_font.imfont->Scale, .5f, 2.f, "%.2f", 1);
 
+        static int wrap_width = 60;
         imgui.igDummy (ImVec2 { 1, imgui.igGetFrameHeight () });
         imgui.igText ("Word wrap:");
         imgui.igDragInt ("Line width", &wrap_width, 1, 40, 160, "%d");
         if (imgui.igButton ("Wrap", ImVec2 {}))
         {
             for (auto& p: journal.pages)
-                p.content = greedy_word_wrap (p.content, 60);
+                p.content = greedy_word_wrap (p.content, wrap_width);
         }
 
         imgui.igDummy (ImVec2 { 1, imgui.igGetFrameHeight () });

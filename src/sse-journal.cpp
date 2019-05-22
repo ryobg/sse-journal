@@ -324,7 +324,7 @@ static std::string greedy_word_wrap (std::string const& source, unsigned width);
 void
 draw_settings ()
 {
-    imgui.igPushFont (journal.system_font.imfont);
+    imgui.igPushFont (journal.default_font.imfont);
     if (imgui.igBegin ("SSE Journal: Settings", &journal.show_settings, 0))
     {
         static ImVec4 button_c  = imgui.igColorConvertU32ToFloat4 (journal.button_font.color),
@@ -350,7 +350,7 @@ draw_settings ()
         imgui.igSliderFloat ("Scale##Text", &journal.text_font.imfont->Scale, .5f, 2.f, "%.2f", 1);
 
         imgui.igText ("Default font:");
-        imgui.igSliderFloat ("Scale", &journal.system_font.imfont->Scale, .5f, 2.f, "%.2f", 1);
+        imgui.igSliderFloat ("Scale", &journal.default_font.imfont->Scale, .5f, 2.f, "%.2f", 1);
 
         static int wrap_width = 60;
         imgui.igDummy (ImVec2 { 1, imgui.igGetFrameHeight () });
@@ -393,7 +393,7 @@ extract_variable_text (void* data, int idx, const char** out_text)
 void
 draw_variables ()
 {
-    imgui.igPushFont (journal.system_font.imfont);
+    imgui.igPushFont (journal.default_font.imfont);
     if (imgui.igBegin ("SSE Journal: Variables", &journal.show_variables, 0))
     {
         static int selection = -1;
@@ -448,7 +448,7 @@ draw_chapters ()
     static float items = 7.25f;
     static int selection = -1;
 
-    imgui.igPushFont (journal.system_font.imfont);
+    imgui.igPushFont (journal.default_font.imfont);
     if (imgui.igBegin ("SSE Journal: Chapters", &journal.show_chapters, 0))
     {
         if (imgui.igListBoxFnPtr ("##Chapters", &selection, extract_chapter_title, nullptr,
@@ -507,7 +507,7 @@ draw_saveas ()
     static int typesel = 0;
     static std::array<const char*, 2> types = { "Journal book (*.json)", "Plain text (*.txt)" };
 
-    imgui.igPushFont (journal.system_font.imfont);
+    imgui.igPushFont (journal.default_font.imfont);
     if (imgui.igBegin ("SSE Journal: Save as file", &journal.show_saveas, 0))
     {
         imgui.igText (books_directory.c_str ());
@@ -595,7 +595,7 @@ draw_load ()
         enumerate_books (filters[typesel], names);
     }
 
-    imgui.igPushFont (journal.system_font.imfont);
+    imgui.igPushFont (journal.default_font.imfont);
     if (imgui.igBegin ("SSE Journal: Load", &journal.show_load, 0))
     {
         imgui.igText (books_directory.c_str ());

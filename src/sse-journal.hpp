@@ -127,7 +127,7 @@ struct journal_t
     std::string background_file;
     ID3D11ShaderResourceView* background;
 
-    font_t button_font, chapter_font, text_font, system_font;
+    font_t button_font, chapter_font, text_font, default_font;
 
     button_t button_prev, button_next,
              button_settings, button_variables, button_chapters,

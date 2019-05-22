@@ -238,7 +238,7 @@ save_settings (std::string const& destination)
         save_font (json, journal.text_font);
         save_font (json, journal.chapter_font);
         save_font (json, journal.button_font);
-        save_font (json, journal.system_font);
+        save_font (json, journal.default_font);
 
         std::ofstream of (destination);
         if (!of.is_open ())
@@ -269,7 +269,7 @@ load_font (nlohmann::json const& json, font_t& font)
     font.scale = jf.value ("scale", font.scale);
     font.size = jf.value ("size", font.size);
     font.file = jf.value ("file", journal_directory + font.name + ".ttf");
-    font.glyphs = jf.value ("glyphs", "");
+    font.glyphs = jf.value ("glyphs", font.glyphs);
     font.ranges = jf.value ("ranges", std::vector<ImWchar> ());
 
     ImWchar const* ranges = nullptr;
@@ -350,6 +350,7 @@ load_settings (std::string const& source)
         load_font (json, journal.button_font);
 
         journal.chapter_font.name = "chapter";
+        journal.chapter_font.glyphs = "all";
         journal.chapter_font.scale = 1.f;
         journal.chapter_font.size = 54.f;
         journal.chapter_font.color = IM_COL32_BLACK;
@@ -357,18 +358,19 @@ load_settings (std::string const& source)
         load_font (json, journal.chapter_font);
 
         journal.text_font.name = "text";
+        journal.text_font.glyphs = "all";
         journal.text_font.scale = 1.f;
         journal.text_font.size = 36.f;
         journal.text_font.color = IM_COL32 (21, 17, 12, 255);
         journal.text_font.default_data = font_viner_hand;
         load_font (json, journal.text_font);
 
-        journal.system_font.name = "default";
-        journal.system_font.scale = 1.f;
-        journal.system_font.size = 18.f;
-        journal.system_font.color = IM_COL32_WHITE;
-        journal.system_font.default_data = font_inconsolata;
-        load_font (json, journal.system_font);
+        journal.default_font.name = "default";
+        journal.default_font.scale = 1.f;
+        journal.default_font.size = 18.f;
+        journal.default_font.color = IM_COL32_WHITE;
+        journal.default_font.default_data = font_inconsolata;
+        load_font (json, journal.default_font);
 
         if (json.contains ("background"))
         {

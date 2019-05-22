@@ -151,5 +151,20 @@ const char* window_message_text (unsigned msg);
 
 //--------------------------------------------------------------------------------------------------
 
+/// Including file permissions and etc. errors
+
+template<class T>
+bool file_exists (T const& name) //allow const char*
+{
+    std::wstring w;
+    utf8_to_utf16 (name.c_str (), w);
+    DWORD attr = ::GetFileAttributesW (w.c_str ());
+    if (attr == INVALID_FILE_ATTRIBUTES)
+        return false;
+    return !(attr & FILE_ATTRIBUTE_DIRECTORY);
+}
+
+//--------------------------------------------------------------------------------------------------
+
 #endif
 

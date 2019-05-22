@@ -33,14 +33,9 @@
  * The file was encoded with the ImGui misc/binary_to_compressed_c.cpp file: compression + base85.
  */
 
-#include <sse-imgui/sse-imgui.h>
-
-/// Defined in skse.cpp
-extern imgui_api imgui;
-
 //--------------------------------------------------------------------------------------------------
 
-static const char viner_hand[111585+1] =
+const char* font_viner_hand/*[111585+1]*/ =
     "7])#######_Gub%'/###W),##0rC$#Q6>##E[n42j;(.K$7)=-m4N;6VNV=BqE%VS`.>>#Z>uu#X0XGHRUfi'bI:;$1iXU%rd[-G?9jJ/5u&##9S###pgHkE1[]IWa'(##`h?>#ml=UC"
     "9+vUkcC?>#X.+R<f'TqLiWSw#gwaw'U>`w'E3n0F*;qe6wl`w'u)7_AjX$iFm_]_FHR>>#[76_Ak`[=Banj=uT^E>#%nq92;4^=B^tO3Z0d_w'nXH#%q$S+H9#ih@m5ZlJvnQS%eeFVC"
     "JBXO(H2OcMUvHm1@D(v#[7B2#5+IW$#UpkL>>1wM6dpf1H[xf(<.R8%2iqV$,P1v#4pv-$3ljh#;YAY8.Pj)#=A?s$k.r?uBZCV$01$##IQViL&Lu(NeW/%#-4ip.>r###)<jI-w1=GM"
@@ -839,15 +834,5 @@ static const char viner_hand[111585+1] =
     "UtV*-RnV*-0dE'-a,$O0X]@608UYQ'HwIt-@9tY-(cfP'/G85'&,s4'sfV4'jJ;4'`&Zn&Va>n&ME#n&D*^m&;eAm&2I&m&Ktdv,>qdv,1ndv,-kdv,XQ8S[wVt+;(im>):s?^4G4)W3"
     "ZO5h%XZd;3RuAg%.6nx[cNPf?AJaW[hs#R#,l*N$>JcfLPd<R8?v+8_4?Rh,N;(V[-Bmx[70uQ#DZ(MPS?^g1t:nB,,]Ne=e7:J,8]21MRPXM,<cfWRTYe,&J(S2C_,pL,E####M>SV0"
     "mi*##";
-
-//--------------------------------------------------------------------------------------------------
-
-ImFont*
-viner_font (float size_pixels, const ImFontConfig* font_cfg, const ImWchar* glyph_ranges)
-{
-    auto font_atlas = imgui.igGetIO ()->Fonts;
-    return imgui.ImFontAtlas_AddFontFromMemoryCompressedBase85TTF (
-            font_atlas, viner_hand, size_pixels, font_cfg, glyph_ranges);
-}
 
 //--------------------------------------------------------------------------------------------------

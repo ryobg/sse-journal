@@ -43,6 +43,13 @@
 
 //--------------------------------------------------------------------------------------------------
 
+std::string journal_directory = "Data\\SKSE\\Plugins\\sse-journal\\";
+std::string books_directory   = journal_directory + "books\\";
+std::string default_book      = books_directory   + "default_book.json";
+std::string settings_location = journal_directory + "settings.json";
+
+//--------------------------------------------------------------------------------------------------
+
 bool
 save_text (std::string const& destination)
 {
@@ -195,6 +202,20 @@ load_book (std::string const& source)
 
 //--------------------------------------------------------------------------------------------------
 
+static void
+save_font (nlohmann::json& json, font_t const& font)
+{
+    auto& jf = json[font.name + " font"];
+    jf["scale"] = font.imfont->Scale;
+    jf["color"] = hex_string (font.color);
+    jf["size"] = font.imfont->FontSize;
+    jf["file"] = font.file;
+    jf["glyphs"] = font.glyphs;
+    jf["ranges"] = font.ranges;
+}
+
+//--------------------------------------------------------------------------------------------------
+
 bool
 save_settings (std::string const& destination)
 {
@@ -211,22 +232,13 @@ save_settings (std::string const& destination)
                 { "patch", patch },
                 { "timestamp", timestamp }
             }},
-            { "text font", {
-                { "scale", journal.text_font->Scale },
-                { "color", hex_string (journal.text_color) }
-            }},
-            { "chapter font", {
-                { "scale", journal.chapter_font->Scale },
-                { "color", hex_string (journal.chapter_color) }
-            }},
-            { "button font", {
-                { "scale", journal.button_font->Scale },
-                { "color", hex_string (journal.button_color) }
-            }},
-            { "system font", {
-                { "scale", journal.system_font->Scale }
-            }}
         };
+
+        json["background"]["file"] = journal.background_file;
+        save_font (json, journal.text_font);
+        save_font (json, journal.chapter_font);
+        save_font (json, journal.button_font);
+        save_font (json, journal.system_font);
 
         std::ofstream of (destination);
         if (!of.is_open ())
@@ -243,6 +255,57 @@ save_settings (std::string const& destination)
         return false;
     }
     return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+static void
+load_font (nlohmann::json const& json, font_t& font)
+{
+    auto font_atlas = imgui.igGetIO ()->Fonts;
+    auto const& jf = json.at (font.name + " font");
+
+    font.color = std::stoull (jf.value ("color", hex_string (font.color)), nullptr, 0);
+    font.scale = jf.value ("scale", font.scale);
+    font.size = jf.value ("size", font.size);
+    font.file = jf.value ("file", journal_directory + font.name + ".ttf");
+    font.glyphs = jf.value ("glyphs", "");
+    font.ranges = jf.value ("ranges", std::vector<ImWchar> ());
+
+    ImWchar const* ranges = nullptr;
+    if (font.ranges.size ())
+    {
+        font.ranges.push_back (0);
+        font.glyphs.clear ();
+    }
+    else if (font.glyphs.size ())
+    {
+        if (font.glyphs == "korean")
+            ranges = imgui.ImFontAtlas_GetGlyphRangesKorean (font_atlas);
+        if (font.glyphs == "japanase")
+            ranges = imgui.ImFontAtlas_GetGlyphRangesJapanese (font_atlas);
+        if (font.glyphs == "chinese full")
+            ranges = imgui.ImFontAtlas_GetGlyphRangesChineseFull (font_atlas);
+        if (font.glyphs == "chinese common")
+            ranges = imgui.ImFontAtlas_GetGlyphRangesChineseSimplifiedCommon (font_atlas);
+        if (font.glyphs == "cyrillic")
+            ranges = imgui.ImFontAtlas_GetGlyphRangesCyrillic (font_atlas);
+        if (font.glyphs == "thai")
+            ranges = imgui.ImFontAtlas_GetGlyphRangesThai (font_atlas);
+        if (font.glyphs == "vietnamese")
+            ranges = imgui.ImFontAtlas_GetGlyphRangesVietnamese (font_atlas);
+    }
+
+    font.imfont = nullptr;
+    if (file_exists (font.file))
+        font.imfont = imgui.ImFontAtlas_AddFontFromFileTTF (
+                font_atlas, font.file.c_str (), font.size, nullptr, ranges);
+    if (!font.imfont)
+    {
+        font.imfont = imgui.ImFontAtlas_AddFontFromMemoryCompressedBase85TTF (
+            font_atlas, font.default_data, font.size, nullptr, ranges);
+        font.file.clear ();
+    }
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -271,18 +334,42 @@ load_settings (std::string const& source)
             return false;
         }
 
-        journal.text_font->Scale = json["text font"]["scale"].get<float> ();
-        journal.chapter_font->Scale = json["chapter font"]["scale"].get<float> ();
-        journal.button_font->Scale = json["button font"]["scale"].get<float> ();
-        journal.system_font->Scale = json["system font"]["scale"].get<float> ();
+        extern const char* font_viner_hand;
+        extern const char* font_inconsolata;
 
-        std::string color;
-        color = json["text font"]["color"].get<std::string> ();
-        journal.text_color = std::stoull (color, nullptr, 0);
-        color = json["chapter font"]["color"].get<std::string> ();
-        journal.chapter_color = std::stoull (color, nullptr, 0);
-        color = json["button font"]["color"].get<std::string> ();
-        journal.button_color = std::stoull (color, nullptr, 0);
+        journal.button_font.name = "button";
+        journal.button_font.scale = 1.f;
+        journal.button_font.size = 36.f;
+        journal.button_font.color = IM_COL32_WHITE;
+        journal.button_font.default_data = font_viner_hand;
+        load_font (json, journal.button_font);
+
+        journal.chapter_font.name = "chapter";
+        journal.chapter_font.scale = 1.f;
+        journal.chapter_font.size = 54.f;
+        journal.chapter_font.color = IM_COL32_BLACK;
+        journal.chapter_font.default_data = font_viner_hand;
+        load_font (json, journal.chapter_font);
+
+        journal.text_font.name = "text";
+        journal.text_font.scale = 1.f;
+        journal.text_font.size = 36.f;
+        journal.text_font.color = IM_COL32 (21, 17, 12, 255);
+        journal.text_font.default_data = font_viner_hand;
+        load_font (json, journal.text_font);
+
+        journal.system_font.name = "default";
+        journal.system_font.scale = 1.f;
+        journal.system_font.size = 18.f;
+        journal.system_font.color = IM_COL32_WHITE;
+        journal.system_font.default_data = font_inconsolata;
+        load_font (json, journal.system_font);
+
+        if (json.contains ("background"))
+        {
+            journal.background_file = json["background"]
+                .value ("file", journal_directory + "book.dds");
+        }
     }
     catch (std::exception const& ex)
     {

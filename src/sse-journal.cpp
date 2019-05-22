@@ -35,18 +35,10 @@ auto constexpr lite_tint = IM_COL32 (191, 157, 111,  64);
 auto constexpr dark_tint = IM_COL32 (191, 157, 111,  96);
 auto constexpr frame_col = IM_COL32 (192, 157, 111, 192);
 
-static const char* background_dds    = "Data\\SKSE\\Plugins\\sse-journal\\book.dds";
-static const char* settings_location = "Data\\SKSE\\Plugins\\sse-journal\\settings.json";
-static const char* books_directory   = "Data\\SKSE\\Plugins\\sse-journal\\books\\";
-static const char* default_book      = "Data\\SKSE\\Plugins\\sse-journal\\books\\default_book.json";
-
 journal_t journal = {};
 
 //--------------------------------------------------------------------------------------------------
 
-ImFont* button_t::font = nullptr;
-std::uint32_t* button_t::color = nullptr;
-ID3D11ShaderResourceView* button_t::background = nullptr;
 ImVec2 button_t::wpos = {};
 ImVec2 button_t::wsz = {};
 
@@ -64,8 +56,8 @@ void button_t::init (
 
 bool button_t::draw ()
 {
-    imgui.igPushFont (font);
-    imgui.igPushStyleColorU32 (ImGuiCol_Text, *color);
+    imgui.igPushFont (journal.button_font.imfont);
+    imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.button_font.color);
     ImVec2 ptl { wsz.x * tl.x, wsz.y * tl.y },
            psz { wsz.x * sz.x, wsz.y * sz.y };
     imgui.igSetCursorPos (ptl);
@@ -74,7 +66,7 @@ bool button_t::draw ()
     if (hovered)
     {
         constexpr float vmax = .7226f; // The Background Y pixels reach ~72% of a 2k texture
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), background,
+        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
             ImVec2 { wpos.x + ptl.x,         wpos.y + ptl.y         },
             ImVec2 { wpos.x + ptl.x + psz.x, wpos.y + ptl.y + psz.y },
             ImVec2 { tl.x, tl.y*vmax }, ImVec2 { tl.x + sz.x, (tl.y + sz.y)*vmax }, hover_tint);
@@ -93,36 +85,14 @@ bool button_t::draw ()
 bool
 setup ()
 {
-    // This is good candidate to offload to SSE ImGui or SSE-GUI
-    if (!sseimgui->ddsfile_texture (background_dds, nullptr, &journal.background))
+    load_settings (settings_location); // File may not exist yet
+
+    if (!sseimgui->ddsfile_texture (journal.background_file.c_str (), nullptr, &journal.background))
     {
         log () << "Unable to load DDS." << std::endl;
         return false;
     }
 
-    auto fa = imgui.igGetIO ()->Fonts;
-    // This MUST go to SSE ImGui
-    imgui.ImFontAtlas_AddFontDefault (fa, nullptr);
-
-    extern ImFont* inconsolata_font (float, const ImFontConfig*, const ImWchar*);
-    extern ImFont* viner_font (float, const ImFontConfig*, const ImWchar*);
-    journal.system_font  = inconsolata_font (24.f, nullptr, nullptr);
-    journal.text_font    = viner_font (48.f, nullptr, nullptr);//merge later so != button_font
-    journal.chapter_font = viner_font (64.f, nullptr, nullptr);
-    journal.button_font  = viner_font (48.f, nullptr, nullptr);
-    if (!journal.system_font || !journal.text_font || !journal.button_font || !journal.chapter_font)
-    {
-        log () << "Unable to load fonts!" << std::endl;
-        return false;
-    }
-
-    journal.button_color = IM_COL32_WHITE;
-    journal.chapter_color = IM_COL32_BLACK;
-    journal.text_color = IM_COL32 (21, 17, 12, 255);
-
-    button_t::font = journal.button_font;
-    button_t::color = &journal.button_color;
-    button_t::background = journal.background;
     auto& j = journal;
     j.button_prev     .init ("Prev##B"     ,   0.f, 0, .050f,   1.f, lite_tint);
     j.button_settings .init ("Settings##B" , .070f, 0, .128f, .060f, dark_tint, .5f, .85f);
@@ -134,8 +104,6 @@ setup ()
     j.button_next     .init ("Next##B"     ,  .95f, 0, .050f,   1.f, lite_tint);
 
     journal.variables = make_variables ();
-
-    load_settings (settings_location); // File may not exist yet
 
     // Fun experiment: ~half a second to load/save 1000 pages with 40k symbols each.
     // This is like ~40MB file, or something like 40 fat books of 500 pages each one. Should be
@@ -277,8 +245,8 @@ render (int active)
     if (journal.button_next.draw ())
         next_page ();
 
-    imgui.igPushFont (journal.chapter_font);
-    imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.chapter_color);
+    imgui.igPushFont (journal.chapter_font.imfont);
+    imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.chapter_font.color);
 
     imgui.igSetNextItemWidth (text_width);
     imgui.igSetCursorPos (ImVec2 { left_page, title_top });
@@ -300,8 +268,8 @@ render (int active)
 
     imgui.igPopFont ();
     imgui.igPopStyleColor (1);
-    imgui.igPushFont (journal.text_font);
-    imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.text_color);
+    imgui.igPushFont (journal.text_font.imfont);
+    imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.text_font.color);
     // Awkward, but there is no sane way to disable it
     imgui.igPushStyleColorU32 (ImGuiCol_ScrollbarBg, IM_COL32_BLACK_TRANS);
     imgui.igPushStyleColorU32 (ImGuiCol_ScrollbarGrab, IM_COL32_BLACK_TRANS);
@@ -358,33 +326,33 @@ draw_settings ()
 {
     static int wrap_width = 60;
 
-    imgui.igPushFont (journal.system_font);
+    imgui.igPushFont (journal.system_font.imfont);
     if (imgui.igBegin ("SSE Journal: Settings", &journal.show_settings, 0))
     {
-        static ImVec4 button_c  = imgui.igColorConvertU32ToFloat4 (journal.button_color),
-                      chapter_c = imgui.igColorConvertU32ToFloat4 (journal.chapter_color),
-                      text_c    = imgui.igColorConvertU32ToFloat4 (journal.text_color);
+        static ImVec4 button_c  = imgui.igColorConvertU32ToFloat4 (journal.button_font.color),
+                      chapter_c = imgui.igColorConvertU32ToFloat4 (journal.chapter_font.color),
+                      text_c    = imgui.igColorConvertU32ToFloat4 (journal.text_font.color);
         constexpr int cflags = ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayHSV
             | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_PickerHueBar
             | ImGuiColorEditFlags_AlphaBar;
 
         imgui.igText ("Buttons font:");
         if (imgui.igColorEdit4 ("Color##Buttons", (float*) &button_c, cflags))
-            journal.button_color = imgui.igGetColorU32Vec4 (button_c);
-        imgui.igSliderFloat ("Scale##Buttons", &journal.button_font->Scale, .5f, 2.f, "%.2f", 1);
+            journal.button_font.color = imgui.igGetColorU32Vec4 (button_c);
+        imgui.igSliderFloat ("Scale##Buttons", &journal.button_font.imfont->Scale,.5f,2.f,"%.2f",1);
 
         imgui.igText ("Titles font:");
         if (imgui.igColorEdit4 ("Color##Titles", (float*) &chapter_c, cflags))
-            journal.chapter_color = imgui.igGetColorU32Vec4 (chapter_c);
-        imgui.igSliderFloat ("Scale##Titles", &journal.chapter_font->Scale, .5f, 2.f, "%.2f", 1);
+            journal.chapter_font.color = imgui.igGetColorU32Vec4 (chapter_c);
+        imgui.igSliderFloat ("Scale##Titles", &journal.chapter_font.imfont->Scale,.5f,2.f,"%.2f",1);
 
         imgui.igText ("Text font:");
         if (imgui.igColorEdit4 ("Color##Text", (float*) &text_c, cflags))
-            journal.text_color = imgui.igGetColorU32Vec4 (text_c);
-        imgui.igSliderFloat ("Scale##Text", &journal.text_font->Scale, .5f, 2.f, "%.2f", 1);
+            journal.text_font.color = imgui.igGetColorU32Vec4 (text_c);
+        imgui.igSliderFloat ("Scale##Text", &journal.text_font.imfont->Scale, .5f, 2.f, "%.2f", 1);
 
         imgui.igText ("Default font:");
-        imgui.igSliderFloat ("Scale", &journal.system_font->Scale, .5f, 2.f, "%.2f", 1);
+        imgui.igSliderFloat ("Scale", &journal.system_font.imfont->Scale, .5f, 2.f, "%.2f", 1);
 
         imgui.igDummy (ImVec2 { 1, imgui.igGetFrameHeight () });
         imgui.igText ("Word wrap:");
@@ -426,7 +394,7 @@ extract_variable_text (void* data, int idx, const char** out_text)
 void
 draw_variables ()
 {
-    imgui.igPushFont (journal.system_font);
+    imgui.igPushFont (journal.system_font.imfont);
     if (imgui.igBegin ("SSE Journal: Variables", &journal.show_variables, 0))
     {
         static int selection = -1;
@@ -481,7 +449,7 @@ draw_chapters ()
     static float items = 7.25f;
     static int selection = -1;
 
-    imgui.igPushFont (journal.system_font);
+    imgui.igPushFont (journal.system_font.imfont);
     if (imgui.igBegin ("SSE Journal: Chapters", &journal.show_chapters, 0))
     {
         if (imgui.igListBoxFnPtr ("##Chapters", &selection, extract_chapter_title, nullptr,
@@ -540,10 +508,10 @@ draw_saveas ()
     static int typesel = 0;
     static std::array<const char*, 2> types = { "Journal book (*.json)", "Plain text (*.txt)" };
 
-    imgui.igPushFont (journal.system_font);
+    imgui.igPushFont (journal.system_font.imfont);
     if (imgui.igBegin ("SSE Journal: Save as file", &journal.show_saveas, 0))
     {
-        imgui.igText (books_directory);
+        imgui.igText (books_directory.c_str ());
         imgui_input_text ("Name", name);
         imgui.igCombo ("Type", &typesel, types.data (), int (types.size ()), -1);
         if (imgui.igButton ("Cancel", ImVec2 {}))
@@ -552,7 +520,7 @@ draw_saveas ()
         if (imgui.igButton ("Save", ImVec2 {}))
         {
             bool ok = true;
-            auto root = std::string (books_directory) + name.c_str ();
+            auto root = books_directory + name.c_str ();
             if (typesel == 0) ok = save_book (root + ".json");
             if (typesel == 1) ok = save_text (root + ".txt");
             popup_error (!ok, "Save As failed");
@@ -595,7 +563,7 @@ enumerate_files (T wildcard, std::vector<std::string>& out)
 void
 enumerate_books (const char* extension, std::vector<std::string>& out)
 {
-    auto wildcard = std::string (books_directory) + extension;
+    auto wildcard = books_directory + extension;
     enumerate_files (wildcard.c_str (), out);
     for (auto& name: out)
         name.erase (name.find_last_of ('.'));
@@ -628,10 +596,10 @@ draw_load ()
         enumerate_books (filters[typesel], names);
     }
 
-    imgui.igPushFont (journal.system_font);
+    imgui.igPushFont (journal.system_font.imfont);
     if (imgui.igBegin ("SSE Journal: Load", &journal.show_load, 0))
     {
-        imgui.igText (books_directory);
+        imgui.igText (books_directory.c_str ());
         imgui.igBeginGroup ();
         if (imgui.igCombo ("##Type", &typesel, types.data (), int (types.size ()), -1))
             enumerate_books (filters[typesel], names);

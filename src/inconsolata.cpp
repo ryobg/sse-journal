@@ -36,14 +36,9 @@
  * The file was encoded with the ImGui misc/binary_to_compressed_c.cpp file: compression + base85.
  */
 
-#include <sse-imgui/sse-imgui.h>
-
-/// Defined in skse.cpp
-extern imgui_api imgui;
-
 //--------------------------------------------------------------------------------------------------
 
-static const char inconsolata[85470+1] =
+const char* font_inconsolata/*[85470+1]*/ =
     "7])#######[UuMV'/###I),##aq0hLYqH##Y?;*>PuCbiFvjo7h@'o/fY;99sWr,#/(m<-E@^01kZn42A%Cmi-->>#$'g<6aNV=BQilE*PZqr$f?uu#[1XGH1UmV#B:jl&IKD210Jk7D"
     "(K2H+(+35&)J8r/l`(*H].4&#8U^C-Qc5&5+-0%Jw;4=dxLJM'*%qo.o,d<BZVCjtQ(l?-G<oY-TT$=(Sj@d#()m<-wqEn/<_[FH(RpG;8A^01fI:;$c3JuB]YJ(-`8ArL3vKMB0iR/G"
     "IW$gL%<;GD1>XA-qmnUCw#gipTAh'uC-W&F@C=GH)$0(&xakfENlC<n1)Q-GVrjeBfWi#Pk>YYdcNhl1M?m1gj%s;DodPirs*gfLZ>$##.b^*_R?QF%CblF#>UMmL]em##0lA,MV+ex-"
@@ -655,16 +650,6 @@ static const char inconsolata[85470+1] =
     "n>M8CwKvsB$]eFH.T,C&&hj-$H1M*Hl^s2B<f/14TVPC5x':oDPj5KNf^j2MuM[L2-II29,Z-D%2scdG0>W&&2%jMF76fp&5#hoD*nfg3i0iTCNxBiFBuViFf9+F$`ICO;Ond=018,-G"
     "g7FVC7ox'&;x^kE=Sem/c]IUC-mgoDZ[gO0q$VeG%^4rCG)tSM:*q`M(TAeGtf6MMKE;=-,/EFMxx,ZGG=2eG9M)_OHk(Y6,R2eGI30iF-p(*H7->>#.uQS%Gj$)*&2P:vo=[w'(T$@'"
     "_QZ`*r%9;-.:Mt--/KkL$4pfL9>ZX$siIfLDw/;OLTh*%gHGusS>&##l;s2Ibg>AtXG=sL";
-
-//--------------------------------------------------------------------------------------------------
-
-ImFont*
-inconsolata_font (float size_pixels, const ImFontConfig* font_cfg, const ImWchar* glyph_ranges)
-{
-    auto font_atlas = imgui.igGetIO ()->Fonts;
-    return imgui.ImFontAtlas_AddFontFromMemoryCompressedBase85TTF (
-            font_atlas, inconsolata, size_pixels, font_cfg, glyph_ranges);
-}
 
 //--------------------------------------------------------------------------------------------------
 

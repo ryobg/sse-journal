@@ -52,6 +52,11 @@ extern std::string logfile_path;
 extern imgui_api imgui;
 extern std::unique_ptr<sseimgui_api> sseimgui;
 
+extern std::string journal_directory;
+extern std::string books_directory;
+extern std::string settings_location;
+extern std::string default_book;
+
 //--------------------------------------------------------------------------------------------------
 
 // fileio.cpp
@@ -62,6 +67,11 @@ bool load_book (std::string const& source);
 bool save_settings (std::string const& destination);
 bool load_settings (std::string const& source);
 bool load_takenotes (std::string const& source);
+
+extern std::string journal_directory;
+extern std::string books_directory;
+extern std::string default_book;
+extern std::string settings_location;
 
 //--------------------------------------------------------------------------------------------------
 
@@ -82,9 +92,6 @@ class button_t
     std::uint32_t hover_tint;
 
 public:
-    static ImFont* font;
-    static std::uint32_t* color;
-    static ID3D11ShaderResourceView* background;
     static ImVec2 wpos, wsz;
 
     void init (const char* label,
@@ -94,11 +101,22 @@ public:
     bool draw ();
 };
 
-//--------------------------------------------------------------------------------------------------
-
 struct page_t
 {
     std::string title, content;
+};
+
+struct font_t
+{
+    std::string name;
+    float scale;
+    float size;
+    std::uint32_t color;
+    std::string file;
+    std::string glyphs; ///< Predefined names (mostly taken from ImGui)
+    std::vector<ImWchar> ranges; ///< Custom pairs of ranges for glyphs, terminated by single 0
+    const char* default_data;
+    ImFont* imfont; ///< Params may be out of sync with *this, until #save_settings()
 };
 
 //--------------------------------------------------------------------------------------------------
@@ -106,10 +124,10 @@ struct page_t
 /// Most important stuff for the current running instance
 struct journal_t
 {
+    std::string background_file;
     ID3D11ShaderResourceView* background;
 
-    ImFont *button_font, *chapter_font, *text_font, *system_font;
-    std::uint32_t button_color, chapter_color, text_color;
+    font_t button_font, chapter_font, text_font, system_font;
 
     button_t button_prev, button_next,
              button_settings, button_variables, button_chapters,

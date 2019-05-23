@@ -32,6 +32,7 @@
 
 #include <fstream>
 #include <vector>
+#include <iterator>
 
 // Warning come in a BSON parser, which is not used, and probably shouldn't be
 #if defined(__GNUC__)
@@ -48,6 +49,7 @@ std::string journal_directory = "Data\\SKSE\\Plugins\\sse-journal\\";
 std::string books_directory   = journal_directory + "books\\";
 std::string default_book      = books_directory   + "default_book.json";
 std::string settings_location = journal_directory + "settings.json";
+std::string variables_location= journal_directory + "variables.json";
 
 //--------------------------------------------------------------------------------------------------
 
@@ -462,6 +464,89 @@ load_takenotes (std::string const& source)
     catch (std::exception const& ex)
     {
         log () << "Unable to load Take Notes XML file: " << ex.what () << std::endl;
+        return false;
+    }
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+bool
+save_variables ()
+{
+    try
+    {
+        nlohmann::json json;
+
+        for (auto const& v: journal.variables)
+            if (v.deletable) json["variables"].push_back ({
+                { "fuid", v.fuid },
+                { "name", v.name.c_str () },
+                { "params", v.params.c_str () }
+            });
+
+        std::ofstream of (variables_location);
+        if (!of.is_open ())
+        {
+            log () << "Unable to open " << variables_location << " for writting." << std::endl;
+            return false;
+        }
+        of << json.dump (4);
+    }
+    catch (std::exception const& ex)
+    {
+        log () << "Unable to save variables file: " << ex.what () << std::endl;
+        return false;
+    }
+    return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+bool
+load_variables ()
+{
+    try
+    {
+        nlohmann::json json;
+
+        std::ifstream fi (variables_location);
+        if (!fi.is_open ())
+            log () << "Unable to open " << variables_location << " for reading." << std::endl;
+        else
+            fi >> json;
+
+        // It is a bit more complex as at least the order of custom elements is to be preserved.
+        journal.variables.erase (std::remove_if (
+                    journal.variables.begin (), journal.variables.end (), [] (auto const& v)
+                    { return v.deletable; }), journal.variables.end ());
+
+        if (!json.contains ("variables"))
+            return true;
+
+        std::vector<variable_t> vars;
+        for (auto const& jv: json["variables"])
+        {
+            int fuid = jv["fuid"].get<int> ();
+            for (auto const& src: journal.variables)
+                if (src.fuid == fuid)
+                {
+                    variable_t v = src;
+                    v.name = jv["name"].get<std::string> ();
+                    v.params = jv["params"].get<std::string> ();
+                    v.deletable = true;
+                    vars.emplace_back (std::move (v));
+                    break;
+                }
+        }
+
+        journal.variables.insert (journal.variables.begin (),
+                std::make_move_iterator (vars.begin ()),
+                std::make_move_iterator (vars.end ()));
+    }
+    catch (std::exception const& ex)
+    {
+        log () << "Unable to load variables file: " << ex.what () << std::endl;
         return false;
     }
     return true;

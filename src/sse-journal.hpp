@@ -52,11 +52,6 @@ extern std::string logfile_path;
 extern imgui_api imgui;
 extern sseimgui_api sseimgui;
 
-extern std::string journal_directory;
-extern std::string books_directory;
-extern std::string settings_location;
-extern std::string default_book;
-
 //--------------------------------------------------------------------------------------------------
 
 // fileio.cpp
@@ -67,6 +62,8 @@ bool load_book (std::string const& source);
 bool load_takenotes (std::string const& source);
 bool save_settings ();
 bool load_settings ();
+bool save_variables ();
+bool load_variables ();
 
 extern std::string journal_directory;
 extern std::string books_directory;
@@ -79,7 +76,8 @@ extern std::string settings_location;
 
 struct variable_t
 {
-    bool unerasable;
+    bool deletable;
+    int fuid;   ///< Unique identifier of functions, allows loading of custom vars
     std::string name, params, info;
     std::function<std::string (variable_t*)> apply;   ///< Avoids inheritance, dynamic mem & etc.
     inline std::string operator () () { return apply (this); }

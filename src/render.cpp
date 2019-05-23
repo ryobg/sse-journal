@@ -1,5 +1,5 @@
 /**
- * @file sse-journal.cpp
+ * @file render.cpp
  * @brief User interface management
  * @internal
  *
@@ -86,6 +86,8 @@ bool
 setup ()
 {
     load_settings (); // File may not exist yet
+    journal.variables = make_variables (); // Loading vars, needs these
+    load_variables ();
 
     if (!sseimgui.ddsfile_texture (journal.background_file.c_str (), nullptr, &journal.background))
     {
@@ -102,8 +104,6 @@ setup ()
     j.button_saveas   .init ("Save As##B"  , .670f, 0, .128f, .060f, dark_tint, .5f, .85f);
     j.button_load     .init ("Load##B"     , .812f, 0, .128f, .060f, dark_tint, .5f, .85f);
     j.button_next     .init ("Next##B"     ,  .95f, 0, .050f,   1.f, lite_tint);
-
-    journal.variables = make_variables ();
 
     // Fun experiment: ~half a second to load/save 1000 pages with 40k symbols each.
     // This is like ~40MB file, or something like 40 fat books of 500 pages each one. Should be
@@ -153,20 +153,21 @@ imgui_text_resize (ImGuiInputTextCallbackData* data)
 
 /// Shared
 bool
-imgui_input_text (const char* label, std::string& text)
+imgui_input_text (const char* label, std::string& text, ImGuiInputTextFlags flags = 0)
 {
     return imgui.igInputText (
             label, const_cast<char*> (text.c_str ()), text.size () + 1,
-            ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
+            flags | ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
 }
 
 /// Shared
 bool
-imgui_input_multiline (const char* label, std::string& text, ImVec2 const& size)
+imgui_input_multiline (
+        const char* label, std::string& text, ImVec2 const& size, ImGuiInputTextFlags flags = 0)
 {
     return imgui.igInputTextMultiline (
             label, const_cast<char*> (text.c_str ()), text.size () + 1,
-            size, ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
+            size, flags | ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -396,23 +397,116 @@ draw_variables ()
     imgui.igPushFont (journal.default_font.imfont);
     if (imgui.igBegin ("SSE Journal: Variables", &journal.show_variables, 0))
     {
-        static int selection = -1;
-        static std::string output;
+        static float items = 7.25f;
+        static int varsel = -1;
+        static std::string output = "(Variables output goes here)",
+                           params = "(Parameters of variables go here)";
+        static ImGuiInputTextFlags params_flags = ImGuiInputTextFlags_ReadOnly;
+        static const char* newvar_popup = "New copy of variable";
+        static std::string newvar_name;
+        static const char* info_popup = "Variable info";
+        static std::string info_text;
+        static ImVec2 info_size;
 
-        if (imgui.igListBoxFnPtr ("Variables", &selection, extract_variable_text,
-                &journal.variables, static_cast<int> (journal.variables.size ()), -1))
-        {
-            if (unsigned (selection) < journal.variables.size ())
-                output = journal.variables[selection] ();
-        }
-        imgui_input_text ("Output", output);
+        imgui.igBeginGroup ();
+
         if (imgui.igButton ("Append left", ImVec2 {}))
             append_input (journal.pages[journal.current_page].content, output);
         imgui.igSameLine (0, -1);
-        if (imgui.igButton ("Append right", ImVec2 {}))
-            append_input (journal.pages[journal.current_page+1].content, output);
         if (imgui.igButton ("Copy to Clipboard", ImVec2 {}))
             imgui.igSetClipboardText (output.c_str ());
+        imgui.igSameLine (0, -1);
+        if (imgui.igButton ("Append right", ImVec2 {}))
+            append_input (journal.pages[journal.current_page+1].content, output);
+
+        if (imgui_input_text ("##Params", params, params_flags))
+        {
+            auto& v = journal.variables[varsel];
+            v.params = params;
+            output = v ();
+        }
+        imgui_input_text ("##Output", output);
+        if (imgui.igListBoxFnPtr ("##Variables", &varsel, extract_variable_text,
+                &journal.variables, static_cast<int> (journal.variables.size ()), items))
+        {
+            if (varsel >= 0)
+            {
+                auto& v = journal.variables[varsel];
+                if (v.deletable) params_flags = 0;
+                else params_flags |= ImGuiInputTextFlags_ReadOnly;
+                params = v.params;
+                output = v ();
+            }
+        }
+
+        imgui.igEndGroup ();
+        imgui.igSameLine (0, -1);
+        imgui.igBeginGroup ();
+        if (imgui.igButton ("Move up", ImVec2 {-1, 0}))
+            if (varsel > 0)
+            {
+                std::swap (journal.variables[varsel], journal.variables[varsel-1]);
+                --varsel;
+            }
+        if (imgui.igButton ("Move down", ImVec2 {-1, 0}))
+            if (varsel >= 0 && varsel+1 < int (journal.variables.size ()))
+            {
+                std::swap (journal.variables[varsel], journal.variables[varsel+1]);
+                ++varsel;
+            }
+        if (imgui.igButton ("Copy as new", ImVec2 {-1, 0}))
+            if (varsel >= 0)
+            {
+                newvar_name = "(enter your name here)";
+                imgui.igOpenPopup (newvar_popup);
+            }
+        if (imgui.igButton ("Delete", ImVec2 {-1, 0}))
+            if (varsel >= 0 && journal.variables[varsel].deletable)
+            {
+                journal.variables.erase (journal.variables.begin () + varsel);
+                params_flags |= ImGuiInputTextFlags_ReadOnly;
+                varsel = -1;
+            }
+        if (imgui.igButton ("Info", ImVec2 {-1, 0}))
+            if (varsel >= 0)
+            {
+                info_text = journal.variables[varsel].info;
+                info_size = imgui.igCalcTextSize (info_text.c_str (), nullptr, false, -1.f);
+                imgui.igOpenPopup (info_popup);
+            }
+        imgui.igDummy (ImVec2 {-1, imgui.igGetTextLineHeight () });
+        if (imgui.igButton ("Save", ImVec2 {-1, 0}))
+            save_variables ();
+        if (imgui.igButton ("Load", ImVec2 {-1, 0}))
+        {
+            load_variables ();
+            varsel = -1;
+            params_flags = 0;
+        }
+        imgui.igEndGroup ();
+        items = (imgui.igGetWindowHeight () / imgui.igGetTextLineHeightWithSpacing ()) - 6;
+
+        if (imgui.igBeginPopup (newvar_popup, 0))
+        {
+            imgui_input_text ("Name", newvar_name, ImGuiInputTextFlags_AutoSelectAll);
+            if (imgui.igButton ("Create", ImVec2 {}))
+            {
+                variable_t v = journal.variables[varsel];
+                v.deletable = true;
+                v.name = newvar_name;
+                journal.variables.insert (journal.variables.begin (), v);
+                varsel = 0;
+                params_flags = 0;
+                imgui.igCloseCurrentPopup ();
+            }
+            imgui.igEndPopup ();
+        }
+        if (imgui.igBeginPopup (info_popup, 0))
+        {
+            imgui_input_multiline (
+                    "##Variable info", info_text, info_size, ImGuiInputTextFlags_ReadOnly);
+            imgui.igEndPopup ();
+        }
     }
     imgui.igEnd ();
     imgui.igPopFont ();

@@ -233,8 +233,9 @@ make_variables ()
     if (game_epoch.pointer)
     {
         variable_t gtime;
-        gtime.unerasable = true;
-        gtime.name = "Game time";
+        gtime.fuid = 1;
+        gtime.deletable = false;
+        gtime.name = "Game time (fixed)";
         gtime.info = "Following substitions starts with %:\n"
             "y is the year number (e.g. 201)\n"
             "Y is the year with the epoch in front (e.g. 4E201)\n"
@@ -257,9 +258,10 @@ make_variables ()
     }
 
     variable_t ltime;
-    ltime.unerasable = true;
-    ltime.name = "Local time";
-    ltime.info = "Look the format specification on "
+    ltime.fuid = 2;
+    ltime.deletable = false;
+    ltime.name = "Local time (fixed)";
+    ltime.info = "Look the format specification on\n"
         "https://en.cppreference.com/w/cpp/chrono/c/strftime";
     ltime.params = "%X %x";
     ltime.apply = [] (variable_t* self) { return local_time (self->params.c_str ()); };

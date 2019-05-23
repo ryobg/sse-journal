@@ -79,6 +79,7 @@ extern std::string settings_location;
 
 struct variable_t
 {
+    bool unerasable;
     std::string name, params, info;
     std::function<std::string (variable_t*)> apply;   ///< Avoids inheritance, dynamic mem & etc.
     inline std::string operator () () { return apply (this); }

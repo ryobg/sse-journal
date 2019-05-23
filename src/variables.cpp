@@ -71,7 +71,7 @@ struct pointer
  * other values, depending on the situation. At start of the game, the pointer reference is null,
  * hence no way to obtain the value.
  *
- * The game starts at Morndas, the 17th of Last Seed, 4E201, approximately 9:30.
+ * The game starts at Morndas, the 17th of Last Seed, 4E201, near 09:30.
  *
  * Found five consecitive pointers with offsets which seems to reside somewhere in the Papyrus
  * virtual machine object (0x1ec3b78) according to SKSE. Weirdly, it is inside the eventSink array
@@ -138,32 +138,29 @@ game_time (std::string format)
         return "(n/a)";
 
     // Compute the format input
-    std::tm t;
     float hms = *source - int (*source);
-    t.tm_hour = int (hms *= 24);
+    int h = int (hms *= 24);
     hms  -= int (hms);
-    t.tm_min  = int (hms *= 60);
+    int m = int (hms *= 60);
     hms  -= int (hms);
-    t.tm_sec  = int (hms * 60);
+    int s = int (hms * 60);
 
+    // Adjusts for starting date: Mon 17 Jul 201
     int d = int (*source);
-    t.tm_year = d / 366 - 1900 + 201;
-    t.tm_yday = d % 366;
-    t.tm_wday = (d+1) % 7;
-    t.tm_isdst = 0;
+    int y = d / 366 + 201;
+    int yd = d % 366 + 229;
+    int wd = (d+1) % 7;
 
-    std::array<int, 12> md = { 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365 };
-    auto mit = std::lower_bound (md.cbegin (), md.cend (), t.tm_yday);
-    t.tm_mon = mit - md.cbegin ();
-    t.tm_mday = t.tm_yday - (t.tm_mon ? *(mit-1) : 0);
+    std::array<int, 12> months = { 31, 59, 90, 120, 151, 181, 212, 243, 273, 304, 334, 365 };
+    auto mit = std::lower_bound (months.cbegin (), months.cend (), yd);
+    int mo = mit - months.cbegin ();
+    int md = (mo ? yd-*(mit-1) : 1+yd);
 
     // Replace years
-    auto ys = "4E" + std::to_string (t.tm_year);
-    replace_all (format, "%EY", ys);
-    replace_all (format, "%Ey", ys);
-    replace_all (format, "%EC", ys);
-    replace_all (format, "%G" , ys);
-    replace_all (format, "%g" , ys);
+    auto sy = std::to_string (y);
+    auto sY = "4E" + sy;
+    replace_all (format, "%y", sy);
+    replace_all (format, "%Y", sY);
 
     // Replace months
     static std::array<std::string, 12> longmon = {
@@ -180,29 +177,33 @@ game_time (std::string format)
         "Thtithil (Egg)", "Nushmeeko (Lizard)", "Shaja-Nushmeeko (Semi-Humanoid Lizard)",
         "Saxhleel (Argonian)", "Xulomaht (The Deceased)"
     };
-    replace_all (format, "%b", longmon[t.tm_mon]);
-    replace_all (format, "%B", birtmon[t.tm_mon]);
-    replace_all (format, "%h", argomon[t.tm_mon]);
+    replace_all (format, "%lm", longmon[mo]);
+    replace_all (format, "%bm", birtmon[mo]);
+    replace_all (format, "%am", argomon[mo]);
+    replace_all (format, "%mo", std::to_string (mo+1));
+    replace_all (format, "%md", std::to_string (md));
 
-    // Replace days
+    // Weekdays
     static std::array<std::string, 7> longwday = {
         "Sundas", "Morndas", "Tirdas", "Middas", "Turdas", "Fredas", "Loredas"
     };
     static std::array<std::string, 7> shrtwday = {
         "Sun", "Mor", "Tir", "Mid", "Tur", "Fre", "Lor"
     };
-    replace_all (format, "%a", shrtwday[t.tm_wday]);
-    replace_all (format, "%A", longwday[t.tm_wday]);
+    replace_all (format, "%sd", shrtwday[wd]);
+    replace_all (format, "%ld", longwday[wd]);
+    replace_all (format, "%wd", std::to_string (wd+1));
 
-    // Custom sets are ignored
-    replace_all (format, "%c" , "");
-    replace_all (format, "%Ec", "");
-    replace_all (format, "%x" , "");
-    replace_all (format, "%Ex", "");
-    replace_all (format, "%X" , "");
-    replace_all (format, "%EX", "");
+    // Time
+    replace_all (format, "%h", std::to_string (h));
+    replace_all (format, "%m", std::to_string (m));
+    replace_all (format, "%s", std::to_string (s));
 
-    return local_time (format.c_str (), t);
+    // Raw
+    replace_all (format, "%r", std::to_string (*source));
+    replace_all (format, "%ri", std::to_string (d));
+
+    return format;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -232,21 +233,31 @@ make_variables ()
     if (game_epoch.pointer)
     {
         variable_t gtime;
+        gtime.unerasable = true;
         gtime.name = "Game time";
-        gtime.info = "Similar to Local Time, but with few quirks:\n"
-            "EY, Ey, EC, G and g are replaced with 4E%Y (e.g. 4E201)\n"
-            "b is long month name (e.g. First Seed)\n"
-            "B is the birth sign for that month (e.g. The Mage)\n"
-            "h is the Argonian name (e.g. Hist-Dooka (Mature Hist))\n"
-            "a is short day name, the 1st three letters (e.g. Tir)\n"
-            "A is the long day name (e.g. Middas)\n"
-            "c, Ec, x, Ex, X and EX are removed";
-        gtime.params = "%r %p %A, day %e of %b, %g";
+        gtime.info = "Following substitions starts with %:\n"
+            "y is the year number (e.g. 201)\n"
+            "Y is the year with the epoch in front (e.g. 4E201)\n"
+            "lm is long month name (e.g. First Seed)\n"
+            "bm is the birth sign for that month (e.g. The Mage)\n"
+            "am is the Argonian month (e.g. Hist-Dooka (Mature Hist))\n"
+            "mo is the month number (from 1 to 12)\n"
+            "md is the month day numer (from 1 to 28,30 or 31)\n"
+            "sd is short day name, the 1st three letters (e.g. Tir)\n"
+            "ld is the long day name (e.g. Middas)\n"
+            "wd is the week day numer (from 1 to 7)\n"
+            "h is the hour (from 0 to 23)\n"
+            "m are the minutes (from 0 to 59)\n"
+            "s are the seconds (from 0 to 59)\n"
+            "r is the raw input (aka Papyrus.GetCurrentGameTime ())\n"
+            "ri is the integer part of %r (i.e. game days since start)";
+        gtime.params = "%h:%m %ld, day %md of %lm, %Y";
         gtime.apply = [] (variable_t* self) { return game_time (self->params); };
         vars.emplace_back (std::move (gtime));
     }
 
     variable_t ltime;
+    ltime.unerasable = true;
     ltime.name = "Local time";
     ltime.info = "Look the format specification on "
         "https://en.cppreference.com/w/cpp/chrono/c/strftime";

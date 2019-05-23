@@ -386,7 +386,7 @@ bool
 extract_variable_text (void* data, int idx, const char** out_text)
 {
     auto vars = reinterpret_cast<decltype (journal.variables)*> (data);
-    *out_text = vars->at (idx).first.c_str ();
+    *out_text = vars->at (idx).name.c_str ();
     return true;
 }
 
@@ -403,7 +403,7 @@ draw_variables ()
                 &journal.variables, static_cast<int> (journal.variables.size ()), -1))
         {
             if (unsigned (selection) < journal.variables.size ())
-                output = journal.variables[selection].second ();
+                output = journal.variables[selection] ();
         }
         imgui_input_text ("Output", output);
         if (imgui.igButton ("Append left", ImVec2 {}))

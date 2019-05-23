@@ -77,8 +77,17 @@ extern std::string settings_location;
 
 // variables.cpp
 
+struct variable_t
+{
+    std::string name, params, info;
+    std::function<std::string (variable_t*)> apply;   ///< Avoids inheritance, dynamic mem & etc.
+    inline std::string operator () () { return apply (this); }
+};
+
+/// @see https://en.cppreference.com/w/cpp/chrono/c/strftime
 std::string local_time (const char* format);
-std::vector<std::pair<std::string, std::function<std::string ()>>> make_variables ();
+
+std::vector<variable_t> make_variables ();
 
 //--------------------------------------------------------------------------------------------------
 
@@ -134,7 +143,7 @@ struct journal_t
              button_save, button_saveas, button_load;
     bool show_settings, show_variables, show_chapters, show_saveas, show_load;
 
-    std::vector<std::pair<std::string, std::function<std::string ()>>> variables;
+    std::vector<variable_t> variables;
 
     std::vector<page_t> pages;
     unsigned current_page;

@@ -46,16 +46,22 @@ extern sseh_api sseh;
 /// To turn relative addresses into absolute so that the Skyrim watch points can be set.
 static std::uintptr_t skyrim_base = 0;
 
-/// Wrap general logic of obtaining an address to a relative object
-template<class T>
-struct pointer
+/// Obtains an address to a relative object, to a relative object, to a relative object, to a...
+template<class T, unsigned N = 1>
+struct relocation
 {
-    std::uintptr_t pointer, offset;
-    inline T* obtain () const
+    std::array<std::uintptr_t, 1+N> offsets;
+    T obtain () const
     {
-        auto that = reinterpret_cast<std::uintptr_t*> (skyrim_base + pointer);
-        if (*that) return reinterpret_cast<T*> (*that + offset);
-        return nullptr;
+        std::uintptr_t that = skyrim_base;
+        for (unsigned i = 0; i < N; ++i)
+        {
+            log ()<<(void*)that <<"+"<<(void*)offsets[i]<< std::endl;
+            that = *reinterpret_cast<std::uintptr_t*> (that + offsets[i]);
+            log ()<<(void*)that<< std::endl;
+            if (!that) return nullptr;
+        }
+        return reinterpret_cast<T> (that + offsets[N]);
     }
 };
 
@@ -85,7 +91,7 @@ struct pointer
  * *0x1ec3bc8 +  0x34
  */
 
-struct pointer<float> game_epoch = {};
+struct relocation<float*> game_epoch { 0x1ec3bc8, 0x34 };
 
 /**
  * Player position as 3 xyz floats.
@@ -98,7 +104,16 @@ struct pointer<float> game_epoch = {};
  * in your journal from first person point of view.
  */
 
-struct pointer<float> player_pos = {};
+struct relocation<float*> player_pos { 0x2f26ef8, 0x54 };
+
+/**
+ * Current worldspace pointer from the PlayerCharacter class accroding to SKSE.
+ *
+ * PlayerCharacter -> CurrentWorldspace -> Fullname -> String data. The worldspace does not exist
+ * during Main Menu, and likely in some locations like the Alternate Start room.
+ */
+
+struct relocation<const char*, 3> worldspace_name { 0x2f26ef8, 0x628, 0x28, 0x00 };
 
 //--------------------------------------------------------------------------------------------------
 
@@ -135,6 +150,10 @@ player_location (std::string format)
     replace_all (format, "%x", sp[0]);
     replace_all (format, "%y", sp[1]);
     replace_all (format, "%z", sp[2]);
+
+    if (auto name = worldspace_name.obtain ())
+         replace_all (format, "%wn", name);
+    else replace_all (format, "%wn", "");
 
     return format;
 }
@@ -262,13 +281,18 @@ make_variables ()
     skyrim_base = reinterpret_cast<std::uintptr_t> (::GetModuleHandle (nullptr));
     std::vector<variable_t> vars;
 
-    game_epoch.pointer = 0x1ec3bc8, game_epoch.offset = 0x34;
     if (sseh.find_target)
     {
-        sseh.find_target ("GameTime", &game_epoch.pointer);
-        sseh.find_target ("GameTime.Offset", &game_epoch.offset);
+        sseh.find_target ("GameTime", &game_epoch.offsets[0]);
+        sseh.find_target ("GameTime.Offset", &game_epoch.offsets[1]);
+        sseh.find_target ("PlayerCharacter", &player_pos.offsets[0]);
+        sseh.find_target ("PlayerCharacter.Position", &player_pos.offsets[1]);
+        sseh.find_target ("PlayerCharacter.Worldspace", &worldspace_name.offsets[1]);
+        sseh.find_target ("Worldspace.Fullname", &worldspace_name.offsets[2]);
+        worldspace_name.offsets[0] = player_pos.offsets[0];
     }
-    if (game_epoch.pointer)
+
+    if (game_epoch.offsets[0])
     {
         variable_t gtime;
         gtime.fuid = 1;
@@ -294,14 +318,7 @@ make_variables ()
         gtime.apply = [] (variable_t* self) { return game_time (self->params); };
         vars.emplace_back (std::move (gtime));
     }
-
-    player_pos.pointer = 0x2f26ef8, player_pos.offset = 0x54;
-    if (sseh.find_target)
-    {
-        sseh.find_target ("PlayerCharacter", &player_pos.pointer);
-        sseh.find_target ("PlayerCharacter.Position", &player_pos.offset);
-    }
-    if (player_pos.pointer)
+    if (player_pos.offsets[0])
     {
         variable_t ppos;
         ppos.fuid = 3;
@@ -309,7 +326,8 @@ make_variables ()
         ppos.name = "Player position (fixed)";
         ppos.info = "The X, Y and Z coordinates of the player.\n"
             "This is the same as the Console \"player.getpos <axis>\"\n"
-            "The parameters are %x %y and %z respectively";
+            "%x %y %z each coordinate respectively\n"
+            "%wn world space name if any";
         ppos.params = "%x %y %z";
         ppos.apply = [] (variable_t* self) { return player_location (self->params); };
         vars.emplace_back (std::move (ppos));

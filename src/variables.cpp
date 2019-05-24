@@ -87,6 +87,19 @@ struct pointer
 
 struct pointer<float> game_epoch = {};
 
+/**
+ * Player position as 3 xyz floats.
+ *
+ * This field can be seen in as static offset SkyrimSE.exe + 0x3233490, but the Z coordinate seems
+ * off, compared to the Console "player.getpos z" calls. There is also what seems to be the camera
+ * position in SkyrimSE.exe + 0x2F3B854, but its Z coord is also a bit weird. Instead, here it is
+ * used the global player reference. As seen from SKSE, this is PlayerCharacter -> Actor ->
+ * TESObjectRERF -> pos as NiPoint3. Camera, may be useful too, but not the idea to write something
+ * in your journal from first person point of view.
+ */
+
+struct pointer<float> player_pos = {};
+
 //--------------------------------------------------------------------------------------------------
 
 /// Small utility function
@@ -99,6 +112,31 @@ replace_all (std::string& data, std::string const& search, std::string const& re
         data.replace (n, search.size (), replace);
         n = data.find (search, n + replace.size ());
     }
+}
+
+//--------------------------------------------------------------------------------------------------
+
+/// It is too easy to crash, of the format is freely adjusted by the user
+
+static std::string
+player_location (std::string format)
+{
+    float* pos = player_pos.obtain ();
+    if (!pos || !std::isfinite (pos[0]) || !std::isfinite (pos[1]) || !std::isfinite (pos[2]))
+        return "(n/a)";
+
+    std::array<std::string, 3> sp;
+    for (int i = 0; i < 3; ++i)
+    {
+        sp[i].resize (15);
+        sp[i].resize (std::snprintf (&sp[i][0], sp[i].size (), "%.0f", pos[i]));
+    }
+
+    replace_all (format, "%x", sp[0]);
+    replace_all (format, "%y", sp[1]);
+    replace_all (format, "%z", sp[2]);
+
+    return format;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -255,6 +293,26 @@ make_variables ()
         gtime.params = "%h:%m %ld, day %md of %lm, %Y";
         gtime.apply = [] (variable_t* self) { return game_time (self->params); };
         vars.emplace_back (std::move (gtime));
+    }
+
+    player_pos.pointer = 0x2f26ef8, player_pos.offset = 0x54;
+    if (sseh.find_target)
+    {
+        sseh.find_target ("PlayerCharacter", &player_pos.pointer);
+        sseh.find_target ("PlayerCharacter.Position", &player_pos.offset);
+    }
+    if (player_pos.pointer)
+    {
+        variable_t ppos;
+        ppos.fuid = 3;
+        ppos.deletable = false;
+        ppos.name = "Player position (fixed)";
+        ppos.info = "The X, Y and Z coordinates of the player.\n"
+            "This is the same as the Console \"player.getpos <axis>\"\n"
+            "The parameters are %x %y and %z respectively";
+        ppos.params = "%x %y %z";
+        ppos.apply = [] (variable_t* self) { return player_location (self->params); };
+        vars.emplace_back (std::move (ppos));
     }
 
     variable_t ltime;

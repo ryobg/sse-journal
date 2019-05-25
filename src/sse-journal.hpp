@@ -36,6 +36,7 @@
 #include <memory>
 #include <fstream>
 #include <string>
+#include <map>
 #include <vector>
 #include <utility>
 #include <functional>
@@ -69,6 +70,7 @@ extern std::string journal_directory;
 extern std::string books_directory;
 extern std::string default_book;
 extern std::string settings_location;
+extern std::string images_directory;
 
 //--------------------------------------------------------------------------------------------------
 
@@ -90,7 +92,7 @@ std::vector<variable_t> make_variables ();
 
 //--------------------------------------------------------------------------------------------------
 
-// sse-journal.cpp
+// render.cpp
 
 /// Wraps up common logic for drawing a button
 class button_t
@@ -109,9 +111,19 @@ public:
     bool draw ();
 };
 
+struct image_t
+{
+    bool background;    ///< Will be there text above it?
+    std::uint32_t tint = IM_COL32_WHITE;
+    /// top left & bottom right points for texture and position
+    std::array<float, 4> uv = {{ 0, 0, 1, 1 }}, xy = {{ 0, 0, 1, 1 }};
+    ID3D11ShaderResourceView* ref;
+};
+
 struct page_t
 {
     std::string title, content;
+    image_t image;
 };
 
 struct font_t
@@ -127,6 +139,8 @@ struct font_t
     ImFont* imfont; ///< Actual font with its settings (apart from #color)
 };
 
+extern bool obtain_image (std::string const& file, image_t& img);
+
 //--------------------------------------------------------------------------------------------------
 
 /// Most important stuff for the current running instance
@@ -138,11 +152,18 @@ struct journal_t
     font_t button_font, chapter_font, text_font, default_font;
 
     button_t button_prev, button_next,
-             button_settings, button_variables, button_chapters,
+             button_settings, button_elements, button_chapters,
              button_save, button_saveas, button_load;
-    bool show_settings, show_variables, show_chapters, show_saveas, show_load;
+    bool show_settings, show_elements, show_chapters, show_saveas, show_load;
 
     std::vector<variable_t> variables;
+
+    struct image_source_t {
+        unsigned refcount;
+        std::string file;
+    };
+    /// Kinda garbage collection, allows sharing of textures across the book
+    std::map<ID3D11ShaderResourceView*, image_source_t> images;
 
     std::vector<page_t> pages;
     unsigned current_page;

@@ -50,6 +50,7 @@ std::string books_directory   = journal_directory + "books\\";
 std::string default_book      = books_directory   + "default_book.json";
 std::string settings_location = journal_directory + "settings.json";
 std::string variables_location= journal_directory + "variables.json";
+std::string images_directory  = journal_directory + "images\\";
 
 //--------------------------------------------------------------------------------------------------
 
@@ -115,10 +116,20 @@ save_book (std::string const& destination)
 
         int i = 0;
         for (auto const& p: journal.pages)
+        {
+            auto it = journal.images.find (p.image.ref);
             json["pages"][std::to_string (i++)] = {
                 { "title", p.title.c_str () },
-                { "content", p.content.c_str () }
+                { "content", p.content.c_str () },
+                { "image",  {
+                    { "file", it == journal.images.end () ? "" : it->second.file.c_str () },
+                    { "background", p.image.background },
+                    { "tint", hex_string (p.image.tint) },
+                    { "uv", { p.image.uv[0], p.image.uv[1], p.image.uv[2], p.image.uv[3] }},
+                    { "xy", { p.image.xy[0], p.image.xy[1], p.image.xy[2], p.image.xy[3] }}
+                }}
             };
+        }
 
         std::ofstream of (destination);
         if (!of.is_open ())
@@ -168,19 +179,29 @@ load_book (std::string const& source)
         std::map<int, page_t> pages; // a map for page sorting and gaps fixing
         for (auto const& kv: json["pages"].items ())
         {
-            page_t p;
+            page_t p = {};
             int ndx = std::stoull (kv.key ());
             auto& v = kv.value ();
             p.title = v["title"].get<std::string> ();
             p.content = v["content"].get<std::string> ();
+            if (v.contains ("image"))
+            {
+                auto& vi = v["image"];
+                auto it = vi["uv"].begin ();
+                for (float& uv: p.image.uv) uv = *it++;
+                it = vi["xy"].begin ();
+                for (float& xy: p.image.xy) xy = *it++;
+                p.image.tint = std::stoull (vi["tint"].get<std::string> (), nullptr, 0);
+                p.image.background = vi["background"];
+                obtain_image (vi["file"], p.image); // resets p.image on success
+            }
             pages.emplace (ndx, std::move (p));
         }
 
         journal.pages.clear ();
         journal.pages.reserve (pages.size ());
         for (auto const& kv: pages)
-            journal.pages.emplace_back (page_t {
-                    std::move (kv.second.title), std::move (kv.second.content) });
+            journal.pages.emplace_back (std::move (kv.second));
 
         while (journal.pages.size () < 2)
         {

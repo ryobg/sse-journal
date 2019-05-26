@@ -258,6 +258,7 @@ save_settings ()
             }},
         };
 
+        json["titlebar"] = journal.show_titlebar;
         json["background"]["file"] = journal.background_file;
         save_font (json, journal.text_font);
         save_font (json, journal.chapter_font);
@@ -424,6 +425,8 @@ load_settings ()
         journal.background_file = journal_directory + "book.dds";
         if (json.contains ("background"))
             journal.background_file = json["background"].value ("file", journal.background_file);
+
+        journal.show_titlebar = json.value ("titlebar", false);
     }
     catch (std::exception const& ex)
     {

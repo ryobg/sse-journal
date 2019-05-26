@@ -197,10 +197,40 @@ render (int active)
         return;
 
     imgui.igSetNextWindowSize (ImVec2 { 800, 600 }, ImGuiCond_FirstUseEver);
+    imgui.igPushFont (journal.default_font.imfont);
 
-    imgui.igBegin ("SSE Journal", nullptr,
-            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoScrollbar
-            | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoBackground);
+    if (imgui.igBegin ("SSE Journal", nullptr,
+            !journal.show_titlebar * (ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse)
+             | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBackground))
+    {
+        extern void draw_book ();
+        draw_book ();
+    }
+    imgui.igEnd ();
+    imgui.igPopFont ();
+
+    extern void draw_settings ();
+    if (journal.show_settings)
+        draw_settings ();
+    extern void draw_elements ();
+    if (journal.show_elements)
+        draw_elements ();
+    extern void draw_chapters ();
+    if (journal.show_chapters)
+        draw_chapters ();
+    extern void draw_saveas ();
+    if (journal.show_saveas)
+        draw_saveas ();
+    extern void draw_load ();
+    if (journal.show_load)
+        draw_load ();
+}
+
+//--------------------------------------------------------------------------------------------------
+
+void
+draw_book ()
+{
     imgui.igPushStyleColorU32 (ImGuiCol_FrameBg, 0);
     imgui.igPushStyleVarFloat (ImGuiStyleVar_FrameBorderSize, 0);
 
@@ -330,23 +360,6 @@ render (int active)
     imgui.igPopStyleColor (5);
     imgui.igPopStyleVar (1);
     imgui.igPopStyleColor (1);
-    imgui.igEnd ();
-
-    extern void draw_settings ();
-    if (journal.show_settings)
-        draw_settings ();
-    extern void draw_elements ();
-    if (journal.show_elements)
-        draw_elements ();
-    extern void draw_chapters ();
-    if (journal.show_chapters)
-        draw_chapters ();
-    extern void draw_saveas ();
-    if (journal.show_saveas)
-        draw_saveas ();
-    extern void draw_load ();
-    if (journal.show_load)
-        draw_load ();
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -394,6 +407,8 @@ draw_settings ()
                 p.content = greedy_word_wrap (p.content, wrap_width);
         }
 
+        imgui.igDummy (ImVec2 { 1, imgui.igGetFrameHeight () });
+        imgui.igCheckbox ("Show titlebar (allows show & hide)", &journal.show_titlebar);
         imgui.igDummy (ImVec2 { 1, imgui.igGetFrameHeight () });
 
         bool save_ok = true;

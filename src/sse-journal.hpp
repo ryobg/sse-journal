@@ -146,6 +146,7 @@ extern bool obtain_image (std::string const& file, image_t& img);
 /// Most important stuff for the current running instance
 struct journal_t
 {
+    bool show_titlebar;
     std::string background_file;
     ID3D11ShaderResourceView* background;
 

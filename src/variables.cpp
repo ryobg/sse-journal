@@ -56,9 +56,7 @@ struct relocation
         std::uintptr_t that = skyrim_base;
         for (unsigned i = 0; i < N; ++i)
         {
-            log ()<<(void*)that <<"+"<<(void*)offsets[i]<< std::endl;
             that = *reinterpret_cast<std::uintptr_t*> (that + offsets[i]);
-            log ()<<(void*)that<< std::endl;
             if (!that) return nullptr;
         }
         return reinterpret_cast<T> (that + offsets[N]);

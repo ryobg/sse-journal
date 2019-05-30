@@ -513,6 +513,7 @@ draw_variables ()
             journal.variables.erase (journal.variables.begin () + varsel);
             params_flags |= ImGuiInputTextFlags_ReadOnly;
             varsel = -1;
+            imgui.igCloseCurrentPopup ();
         }
         imgui.igEndPopup ();
     }
@@ -828,8 +829,11 @@ draw_chapters ()
         if (imgui.igBeginPopup ("Delete chapter?", 0))
         {
             if (imgui.igButton ("Are you sure?##Chapter", ImVec2 {}))
-                adjust = true,
+            {
+                adjust = true;
                 journal.pages.erase (journal.pages.begin () + selection);
+                imgui.igCloseCurrentPopup ();
+            }
             imgui.igEndPopup ();
         }
         imgui.igEndGroup ();

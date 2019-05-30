@@ -505,11 +505,17 @@ draw_variables ()
         }
     if (imgui.igButton ("Delete", ImVec2 {-1, 0}))
         if (varsel >= 0 && journal.variables[varsel].deletable)
+            imgui.igOpenPopup ("Delete variable?");
+    if (imgui.igBeginPopup ("Delete variable?", 0))
+    {
+        if (imgui.igButton ("Are you sure?##Variable", ImVec2 {}))
         {
             journal.variables.erase (journal.variables.begin () + varsel);
             params_flags |= ImGuiInputTextFlags_ReadOnly;
             varsel = -1;
         }
+        imgui.igEndPopup ();
+    }
     if (imgui.igButton ("Info", ImVec2 {-1, 0}))
         if (varsel >= 0)
         {
@@ -817,10 +823,14 @@ draw_chapters ()
                 journal.pages.insert (journal.pages.begin () + selection + 1, page_t {});
         }
         if (imgui.igButton ("Delete", ImVec2 {-1, 0}))
-        {
             if (selection >= 0 && selection < int (journal.pages.size ()))
+                imgui.igOpenPopup ("Delete chapter?");
+        if (imgui.igBeginPopup ("Delete chapter?", 0))
+        {
+            if (imgui.igButton ("Are you sure?##Chapter", ImVec2 {}))
                 adjust = true,
                 journal.pages.erase (journal.pages.begin () + selection);
+            imgui.igEndPopup ();
         }
         imgui.igEndGroup ();
 

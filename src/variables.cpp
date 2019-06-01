@@ -104,6 +104,10 @@ struct relocation<float*> game_epoch { 0x1ec3bc8, 0x34 };
 
 struct relocation<float*> player_pos { 0x2f26ef8, 0x54 };
 
+/// Better source of names for location - good addition to the World space name.
+
+struct relocation<const char*, 3> player_cell { 0x2f26ef8, 0x60, 0x28, 0 };
+
 /**
  * Current worldspace pointer from the PlayerCharacter class accroding to SKSE.
  *
@@ -149,9 +153,16 @@ player_location (std::string format)
     replace_all (format, "%y", sp[1]);
     replace_all (format, "%z", sp[2]);
 
+    replace_all (format, "%cx", std::to_string (int (std::floor (sp[0]/4096)));
+    replace_all (format, "%cy", std::to_string (int (std::floor (sp[1]/4096))));
+
     if (auto name = worldspace_name.obtain ())
          replace_all (format, "%wn", name);
     else replace_all (format, "%wn", "");
+
+    if (auto name = player_cell.obtain ())
+         replace_all (format, "%cn", name);
+    else replace_all (format, "%cn", "");
 
     return format;
 }
@@ -285,9 +296,12 @@ make_variables ()
         sseh.find_target ("GameTime.Offset", &game_epoch.offsets[1]);
         sseh.find_target ("PlayerCharacter", &player_pos.offsets[0]);
         sseh.find_target ("PlayerCharacter.Position", &player_pos.offsets[1]);
+        sseh.find_target ("PlayerCharacter.Cell", &player_cell.offsets[1]);
         sseh.find_target ("PlayerCharacter.Worldspace", &worldspace_name.offsets[1]);
         sseh.find_target ("Worldspace.Fullname", &worldspace_name.offsets[2]);
+        sseh.find_target ("Cell.Fullname", &player_cell.offsets[2]);
         worldspace_name.offsets[0] = player_pos.offsets[0];
+        player_cell.offsets[0] = player_pos.offsets[0];
     }
 
     if (game_epoch.offsets[0])
@@ -322,11 +336,13 @@ make_variables ()
         ppos.fuid = 3;
         ppos.deletable = false;
         ppos.name = "Player position (fixed)";
-        ppos.info = "The X, Y and Z coordinates of the player.\n"
+        ppos.info = "The World/cell/XYZ coordinates of the player.\n"
             "This is the same as the Console \"player.getpos <axis>\"\n"
             "%x %y %z each coordinate respectively\n"
+            "%cx %cy cell coordinates (useful for modders)\n"
+            "%cn current cell name, if any\n"
             "%wn world space name if any";
-        ppos.params = "%x %y %z";
+        ppos.params = "%wn, %cn: %x %y %z";
         ppos.apply = [] (variable_t* self) { return player_location (self->params); };
         vars.emplace_back (std::move (ppos));
     }

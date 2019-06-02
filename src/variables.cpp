@@ -153,8 +153,8 @@ player_location (std::string format)
     replace_all (format, "%y", sp[1]);
     replace_all (format, "%z", sp[2]);
 
-    replace_all (format, "%cx", std::to_string (int (std::floor (sp[0]/4096)));
-    replace_all (format, "%cy", std::to_string (int (std::floor (sp[1]/4096))));
+    replace_all (format, "%cx", std::to_string (int (std::floor (pos[0]/4096))));
+    replace_all (format, "%cy", std::to_string (int (std::floor (pos[1]/4096))));
 
     if (auto name = worldspace_name.obtain ())
          replace_all (format, "%wn", name);

@@ -49,6 +49,7 @@ void journal_version (int* maj, int* min, int* patch, const char** timestamp);
 
 extern std::ofstream& log ();
 extern std::string logfile_path;
+extern std::string journal_message;
 
 extern imgui_api imgui;
 extern sseimgui_api sseimgui;

@@ -26,6 +26,7 @@
  */
 
 #include "sse-journal.hpp"
+#include <gsl/gsl_util>
 #include <cstring>
 #include <cctype>
 
@@ -190,6 +191,50 @@ popup_error (bool begin, const char* name)
 
 //--------------------------------------------------------------------------------------------------
 
+/// This must be called before the main window begin()
+
+static void
+journal_command ()
+{
+    if (journal_message.empty ())
+        return;
+    auto clear = gsl::finally ([] { journal_message.clear (); });
+
+    auto pos = journal_message.find_last_of ('@');
+    if (pos != std::string::npos)
+    {
+        auto book = books_directory + journal_message.substr (pos + 1) + ".json";
+        if (!load_book (book))
+        {
+            log () << "Unable to load mod requested book " << book << std::endl;
+            return;
+        }
+        journal_message.erase (journal_message.begin () + pos);
+    }
+
+    auto it = std::find_if (journal.pages.cbegin (), journal.pages.cend (),
+            [] (page_t const& p)
+            {
+                return p.title.find (journal_message) != std::string::npos
+                  || p.content.find (journal_message) != std::string::npos;
+            });
+
+    if (it == journal.pages.cend ())
+    {
+        log () << "Unable to find mod requested string " << journal_message << std::endl;
+        return;
+    }
+
+    auto page = std::distance (journal.pages.cbegin (), it);
+    journal.current_page = std::min (std::size_t (page), journal.pages.size () - 2);
+
+    if (journal.show_titlebar)
+        imgui.igSetNextWindowCollapsed (false, 0);
+    imgui.igSetNextWindowFocus ();
+}
+
+//--------------------------------------------------------------------------------------------------
+
 void SSEIMGUI_CCONV
 render (int active)
 {
@@ -198,6 +243,8 @@ render (int active)
 
     imgui.igSetNextWindowSize (ImVec2 { 800, 600 }, ImGuiCond_FirstUseEver);
     imgui.igPushFont (journal.default_font.imfont);
+
+    journal_command ();
 
     if (imgui.igBegin ("SSE Journal", nullptr,
             !journal.show_titlebar * (ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse)

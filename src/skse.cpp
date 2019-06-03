@@ -62,6 +62,9 @@ imgui_api imgui = {};
 /// [shared] Reports current log file path (for user friendly messages)
 std::string logfile_path;
 
+/// [shared] Kind of message queue to be polled from the renderer for custom commands execution
+std::string journal_message;
+
 //--------------------------------------------------------------------------------------------------
 
 static void
@@ -109,6 +112,18 @@ journal_version (int* maj, int* min, int* patch, const char** timestamp)
     if (min) *min = ver[1];
     if (patch) *patch = ver[2];
     if (timestamp) *timestamp = JOURNAL_TIMESTAMP; //"2019-04-15T08:37:11.419416+00:00"
+}
+
+//--------------------------------------------------------------------------------------------------
+
+/// SSE-MapTrack may send message with a command to execute, from within its rendering loop
+
+static void
+handle_journal_message (SKSEMessagingInterface::Message* m)
+{
+    if (m->type != 1 || m->dataLen < 1)
+        return;
+    journal_message = reinterpret_cast<const char*> (m->data);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -208,6 +223,7 @@ SKSEPlugin_Load (SKSEInterface const* skse)
 
     messages = (SKSEMessagingInterface*) skse->QueryInterface (kInterface_Messaging);
     messages->RegisterListener (plugin, "SKSE", handle_skse_message);
+    messages->RegisterListener (plugin, "sse-journal", handle_journal_message);
 
     int a, m, p;
     const char* b;

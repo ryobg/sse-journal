@@ -181,7 +181,7 @@ handle_sseh_message (SKSEMessagingInterface::Message* m)
 
 //--------------------------------------------------------------------------------------------------
 
-/// Post Load ensure SSE-ImGui is loaded and can accept listeners
+/// Post Load ensure SSE-ImGui and Co. are loaded and can accept listeners
 
 static void
 handle_skse_message (SKSEMessagingInterface::Message* m)
@@ -191,6 +191,7 @@ handle_skse_message (SKSEMessagingInterface::Message* m)
     log () << "SKSE Post Load." << std::endl;
     messages->RegisterListener (plugin, "SSEH", handle_sseh_message);
     messages->RegisterListener (plugin, "SSEIMGUI", handle_sseimgui_message);
+    messages->RegisterListener (plugin, "sse-maptrack", handle_journal_message);
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -223,7 +224,6 @@ SKSEPlugin_Load (SKSEInterface const* skse)
 
     messages = (SKSEMessagingInterface*) skse->QueryInterface (kInterface_Messaging);
     messages->RegisterListener (plugin, "SKSE", handle_skse_message);
-    messages->RegisterListener (plugin, "sse-journal", handle_journal_message);
 
     int a, m, p;
     const char* b;

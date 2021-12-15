@@ -26,15 +26,15 @@
  */
 
 #include "sse-journal.hpp"
-#include <gsl/gsl_util>
-#include <cstring>
 #include <cctype>
+#include <cstring>
+#include <gsl/gsl_util>
 
 //--------------------------------------------------------------------------------------------------
 
-auto constexpr lite_tint = IM_COL32 (191, 157, 111,  64);
-auto constexpr dark_tint = IM_COL32 (191, 157, 111,  96);
-auto constexpr frame_col = IM_COL32 (192, 157, 111, 192);
+auto constexpr lite_tint = IM_COL32(191, 157, 111, 64);
+auto constexpr dark_tint = IM_COL32(191, 157, 111, 96);
+auto constexpr frame_col = IM_COL32(192, 157, 111, 192);
 using namespace std::string_literals;
 
 journal_t journal = {};
@@ -44,374 +44,376 @@ journal_t journal = {};
 ImVec2 button_t::wpos = {};
 ImVec2 button_t::wsz = {};
 
-void button_t::init (
-        const char* label,
-        float tlx, float tly, float szx, float szy,
-        std::uint32_t hover, float ax, float ay)
-{
-    this->align = ImVec2 { ax, ay };
-    this->label = label;
-    label_end = std::strchr (label, '#');
-    tl.x = tlx, tl.y = tly, sz.x = szx, sz.y = szy;
-    hover_tint = hover;
+void button_t::init(const char *label, float tlx, float tly, float szx,
+                    float szy, std::uint32_t hover, float ax, float ay) {
+  this->align = ImVec2{ax, ay};
+  this->label = label;
+  label_end = std::strchr(label, '#');
+  tl.x = tlx, tl.y = tly, sz.x = szx, sz.y = szy;
+  hover_tint = hover;
 }
 
-bool button_t::draw ()
-{
-    imgui.igPushFont (journal.button_font.imfont);
-    imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.button_font.color);
-    ImVec2 ptl { wsz.x * tl.x, wsz.y * tl.y },
-           psz { wsz.x * sz.x, wsz.y * sz.y };
-    imgui.igSetCursorPos (ptl);
-    bool pressed = imgui.igInvisibleButton (label, psz);
-    bool hovered = imgui.igIsItemHovered (0);
-    if (hovered)
-    {
-        constexpr float vmax = .7226f; // The Background Y pixels reach ~72% of a 2k texture
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
-            ImVec2 { wpos.x + ptl.x,         wpos.y + ptl.y         },
-            ImVec2 { wpos.x + ptl.x + psz.x, wpos.y + ptl.y + psz.y },
-            ImVec2 { tl.x, tl.y*vmax }, ImVec2 { tl.x + sz.x, (tl.y + sz.y)*vmax }, hover_tint);
-    }
-    auto txtsz = imgui.igCalcTextSize (label, label_end, false, -1.f);
-    imgui.igSetCursorPos (ImVec2 { ptl.x + align.x * (psz.x - txtsz.x),
-                                   ptl.y + align.y * (psz.y - txtsz.y) });
-    imgui.igTextUnformatted (label, label_end);
-    imgui.igPopFont ();
-    imgui.igPopStyleColor (1);
-    return pressed;
-}
-
-//--------------------------------------------------------------------------------------------------
-
-bool
-setup ()
-{
-    load_settings (); // File may not exist yet
-    journal.variables = make_variables (); // Loading vars, needs these
-    load_variables ();
-
-    if (!sseimgui.ddsfile_texture (journal.background_file.c_str (), nullptr, &journal.background))
-    {
-        log () << "Unable to load DDS." << std::endl;
-        return false;
-    }
-
-    auto& j = journal;
-    j.button_prev     .init ("Prev##B"    ,   0.f, 0, .050f,   1.f, lite_tint);
-    j.button_settings .init ("Settings##B", .070f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    j.button_elements .init ("Elements##B", .212f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    j.button_chapters .init ("Chapters##B", .354f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    j.button_save     .init ("Save##B"    , .528f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    j.button_saveas   .init ("Save As##B" , .670f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    j.button_load     .init ("Load##B"    , .812f, 0, .128f, .060f, dark_tint, .5f, .85f);
-    j.button_next     .init ("Next##B"    ,  .95f, 0, .050f,   1.f, lite_tint);
-
-    // Fun experiment: ~half a second to load/save 1000 pages with 40k symbols each.
-    // This is like ~40MB file, or something like 40 fat books of 500 pages each one. Should be
-    // bearable in practice for lower spec machines. The ImGui is well responsive btw.
-
-    load_book (default_book); // This one also may not exist
-    if (journal.pages.size () < 3)
-        journal.pages.resize (2);
-    if (journal.current_page+2 >= journal.pages.size ())
-        journal.current_page = 0;
-
-    return true;
+bool button_t::draw() {
+  imgui.igPushFont(journal.button_font.imfont);
+  imgui.igPushStyleColor_U32(ImGuiCol_Text, journal.button_font.color);
+  ImVec2 ptl{wsz.x * tl.x, wsz.y * tl.y}, psz{wsz.x * sz.x, wsz.y * sz.y};
+  imgui.igSetCursorPos(ptl);
+  bool pressed = imgui.igInvisibleButton(label, psz, 0);
+  bool hovered = imgui.igIsItemHovered(0);
+  if (hovered) {
+    constexpr float vmax =
+        .7226f; // The Background Y pixels reach ~72% of a 2k texture
+    imgui.ImDrawList_AddImage(
+        imgui.igGetWindowDrawList(), journal.background,
+        ImVec2{wpos.x + ptl.x, wpos.y + ptl.y},
+        ImVec2{wpos.x + ptl.x + psz.x, wpos.y + ptl.y + psz.y},
+        ImVec2{tl.x, tl.y * vmax}, ImVec2{tl.x + sz.x, (tl.y + sz.y) * vmax},
+        hover_tint);
+  }
+  ImVec2 txtsz;
+  imgui.igCalcTextSize(&txtsz, label, label_end, false, -1.f);
+  imgui.igSetCursorPos(ImVec2{ptl.x + align.x * (psz.x - txtsz.x),
+                              ptl.y + align.y * (psz.y - txtsz.y)});
+  imgui.igTextUnformatted(label, label_end);
+  imgui.igPopFont();
+  imgui.igPopStyleColor(1);
+  return pressed;
 }
 
 //--------------------------------------------------------------------------------------------------
 
-/// Resizing one by one causes FPS stutters and CDTs, hence minimal SSO size + power of 2
+static inline ImVec4
+igColorConvertU32ToFloat4 (std::uint32_t v) {
+    ImVec4 x;
+    imgui.igColorConvertU32ToFloat4 (&x, v);
+    return x;
+}
 
-static inline std::size_t
-next_pow2 (std::size_t n)
-{
-    std::size_t p = 16;
-    while (p < n) p <<= 1;
-    return p;
+//--------------------------------------------------------------------------------------------------
+
+bool setup() {
+  load_settings();                      // File may not exist yet
+  journal.variables = make_variables(); // Loading vars, needs these
+  load_variables();
+
+  if (!sseimgui.ddsfile_texture(journal.background_file.c_str(), nullptr,
+                                &journal.background)) {
+    log() << "Unable to load DDS." << std::endl;
+    return false;
+  }
+
+  auto &j = journal;
+  j.button_prev.init("Prev##B", 0.f, 0, .050f, 1.f, lite_tint);
+  j.button_settings.init("Settings##B", .070f, 0, .128f, .060f, dark_tint, .5f,
+                         .85f);
+  j.button_elements.init("Elements##B", .212f, 0, .128f, .060f, dark_tint, .5f,
+                         .85f);
+  j.button_chapters.init("Chapters##B", .354f, 0, .128f, .060f, dark_tint, .5f,
+                         .85f);
+  j.button_save.init("Save##B", .528f, 0, .128f, .060f, dark_tint, .5f, .85f);
+  j.button_saveas.init("Save As##B", .670f, 0, .128f, .060f, dark_tint, .5f,
+                       .85f);
+  j.button_load.init("Load##B", .812f, 0, .128f, .060f, dark_tint, .5f, .85f);
+  j.button_next.init("Next##B", .95f, 0, .050f, 1.f, lite_tint);
+
+  // Fun experiment: ~half a second to load/save 1000 pages with 40k symbols
+  // each. This is like ~40MB file, or something like 40 fat books of 500 pages
+  // each one. Should be bearable in practice for lower spec machines. The ImGui
+  // is well responsive btw.
+
+  load_book(default_book); // This one also may not exist
+  if (journal.pages.size() < 3)
+    journal.pages.resize(2);
+  if (journal.current_page + 2 >= journal.pages.size())
+    journal.current_page = 0;
+
+  return true;
+}
+
+//--------------------------------------------------------------------------------------------------
+
+/// Resizing one by one causes FPS stutters and CDTs, hence minimal SSO size +
+/// power of 2
+
+static inline std::size_t next_pow2(std::size_t n) {
+  std::size_t p = 16;
+  while (p < n)
+    p <<= 1;
+  return p;
 };
 
-static void
-append_input (std::string& text, std::string const& suffix)
-{
-    auto sz = std::strlen (text.c_str ());
-    if (sz + suffix.size () > text.size ())
-        text.resize (next_pow2 (sz + suffix.size () + text.size ()));
-    text.insert (sz, suffix);
+static void append_input(std::string &text, std::string const &suffix) {
+  auto sz = std::strlen(text.c_str());
+  if (sz + suffix.size() > text.size())
+    text.resize(next_pow2(sz + suffix.size() + text.size()));
+  text.insert(sz, suffix);
 }
 
-static int
-imgui_text_resize (ImGuiInputTextCallbackData* data)
-{
-    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize)
-    {
-        auto str = reinterpret_cast<std::string*> (data->UserData);
-        str->resize (next_pow2 (data->BufSize) - 1); // likely to avoid the internal pow2 of resize
-        data->Buf = const_cast<char*> (str->c_str ());
-    }
-    return 0;
+static int imgui_text_resize(ImGuiInputTextCallbackData *data) {
+  if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
+    auto str = reinterpret_cast<std::string *>(data->UserData);
+    str->resize(next_pow2(data->BufSize) -
+                1); // likely to avoid the internal pow2 of resize
+    data->Buf = const_cast<char *>(str->c_str());
+  }
+  return 0;
 }
 
 /// Shared
-bool
-imgui_input_text (const char* label, std::string& text, ImGuiInputTextFlags flags = 0)
-{
-    return imgui.igInputText (
-            label, const_cast<char*> (text.c_str ()), text.size () + 1,
-            flags | ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
+bool imgui_input_text(const char *label, std::string &text,
+                      ImGuiInputTextFlags flags = 0) {
+  return imgui.igInputText(
+      label, const_cast<char *>(text.c_str()), text.size() + 1,
+      flags | ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
 }
 
 /// Shared
-bool
-imgui_input_multiline (
-        const char* label, std::string& text, ImVec2 const& size, ImGuiInputTextFlags flags = 0)
-{
-    return imgui.igInputTextMultiline (
-            label, const_cast<char*> (text.c_str ()), text.size () + 1,
-            size, flags | ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
+bool imgui_input_multiline(const char *label, std::string &text,
+                           ImVec2 const &size, ImGuiInputTextFlags flags = 0) {
+  return imgui.igInputTextMultiline(
+      label, const_cast<char *>(text.c_str()), text.size() + 1, size,
+      flags | ImGuiInputTextFlags_CallbackResize, imgui_text_resize, &text);
 }
 
 //--------------------------------------------------------------------------------------------------
 
-static void
-popup_error (bool begin, const char* name)
-{
-    if (begin && !imgui.igIsPopupOpen (name))
-        imgui.igOpenPopup (name);
-    if (imgui.igBeginPopupModal (name, nullptr, 0))
-    {
-        imgui.igText ("An error has occured, see %s", logfile_path.c_str ());
-        if (imgui.igButton ("Close", ImVec2 {} ))
-            imgui.igCloseCurrentPopup ();
-        imgui.igSetItemDefaultFocus ();
-        imgui.igEndPopup ();
-    }
+static void popup_error(bool begin, const char *name) {
+  if (begin && !imgui.igIsPopupOpen_Str(name, 0))
+    imgui.igOpenPopup_Str(name, 0);
+  if (imgui.igBeginPopupModal(name, nullptr, 0)) {
+    imgui.igText("An error has occured, see %s", logfile_path.c_str());
+    if (imgui.igButton("Close", ImVec2{}))
+      imgui.igCloseCurrentPopup();
+    imgui.igSetItemDefaultFocus();
+    imgui.igEndPopup();
+  }
 }
 
 //--------------------------------------------------------------------------------------------------
 
 /// This must be called before the main window begin()
 
-static void
-journal_command ()
-{
-    if (journal_message.empty ())
-        return;
-    auto clear = gsl::finally ([] { journal_message.clear (); });
+static void journal_command() {
+  if (journal_message.empty())
+    return;
+  auto clear = gsl::finally([] { journal_message.clear(); });
 
-    auto pos = journal_message.find_last_of ('@');
-    if (pos != std::string::npos)
-    {
-        auto book = books_directory + journal_message.substr (pos + 1) + ".json";
-        if (!load_book (book))
-        {
-            log () << "Unable to load mod requested book " << book << std::endl;
-            return;
-        }
-        journal_message.erase (journal_message.begin () + pos);
+  auto pos = journal_message.find_last_of('@');
+  if (pos != std::string::npos) {
+    auto book = books_directory + journal_message.substr(pos + 1) + ".json";
+    if (!load_book(book)) {
+      log() << "Unable to load mod requested book " << book << std::endl;
+      return;
     }
+    journal_message.erase(journal_message.begin() + pos);
+  }
 
-    auto it = std::find_if (journal.pages.cbegin (), journal.pages.cend (),
-            [] (page_t const& p)
-            {
-                return p.title.find (journal_message) != std::string::npos
-                  || p.content.find (journal_message) != std::string::npos;
-            });
+  auto it = std::find_if(
+      journal.pages.cbegin(), journal.pages.cend(), [](page_t const &p) {
+        return p.title.find(journal_message) != std::string::npos ||
+               p.content.find(journal_message) != std::string::npos;
+      });
 
-    if (it == journal.pages.cend ())
-    {
-        log () << "Unable to find mod requested string " << journal_message << std::endl;
-        return;
-    }
+  if (it == journal.pages.cend()) {
+    log() << "Unable to find mod requested string " << journal_message
+          << std::endl;
+    return;
+  }
 
-    auto page = std::distance (journal.pages.cbegin (), it);
-    journal.current_page = std::min (std::size_t (page), journal.pages.size () - 2);
+  auto page = std::distance(journal.pages.cbegin(), it);
+  journal.current_page = std::min(std::size_t(page), journal.pages.size() - 2);
 
-    if (journal.show_titlebar)
-        imgui.igSetNextWindowCollapsed (false, 0);
-    imgui.igSetNextWindowFocus ();
+  if (journal.show_titlebar)
+    imgui.igSetNextWindowCollapsed(false, 0);
+  imgui.igSetNextWindowFocus();
 }
 
 //--------------------------------------------------------------------------------------------------
 
-void SSEIMGUI_CCONV
-render (int active)
-{
-    if (!active)
-        return;
+void SSEIMGUI_CCONV render(int active) {
+  if (!active)
+    return;
 
-    imgui.igSetNextWindowSize (ImVec2 { 800, 600 }, ImGuiCond_FirstUseEver);
-    imgui.igPushFont (journal.default_font.imfont);
+  imgui.igSetNextWindowSize(ImVec2{800, 600}, ImGuiCond_FirstUseEver);
+  imgui.igPushFont(journal.default_font.imfont);
 
-    journal_command ();
+  journal_command();
 
-    if (imgui.igBegin ("SSE Journal", nullptr,
-            !journal.show_titlebar * (ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse)
-             | ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoBackground))
-    {
-        extern void draw_book ();
-        draw_book ();
-    }
-    imgui.igEnd ();
-    imgui.igPopFont ();
+  if (imgui.igBegin("SSE Journal", nullptr,
+                    !journal.show_titlebar * (ImGuiWindowFlags_NoTitleBar |
+                                              ImGuiWindowFlags_NoCollapse) |
+                        ImGuiWindowFlags_NoScrollbar |
+                        ImGuiWindowFlags_NoBackground)) {
+    extern void draw_book();
+    draw_book();
+  }
+  imgui.igEnd();
+  imgui.igPopFont();
 
-    extern void draw_settings ();
-    if (journal.show_settings)
-        draw_settings ();
-    extern void draw_elements ();
-    if (journal.show_elements)
-        draw_elements ();
-    extern void draw_chapters ();
-    if (journal.show_chapters)
-        draw_chapters ();
-    extern void draw_saveas ();
-    if (journal.show_saveas)
-        draw_saveas ();
-    extern void draw_load ();
-    if (journal.show_load)
-        draw_load ();
+  extern void draw_settings();
+  if (journal.show_settings)
+    draw_settings();
+  extern void draw_elements();
+  if (journal.show_elements)
+    draw_elements();
+  extern void draw_chapters();
+  if (journal.show_chapters)
+    draw_chapters();
+  extern void draw_saveas();
+  if (journal.show_saveas)
+    draw_saveas();
+  extern void draw_load();
+  if (journal.show_load)
+    draw_load();
 }
 
 //--------------------------------------------------------------------------------------------------
 
-void
-draw_book ()
-{
-    imgui.igPushStyleColorU32 (ImGuiCol_FrameBg, 0);
-    imgui.igPushStyleVarFloat (ImGuiStyleVar_FrameBorderSize, 0);
+void draw_book() {
+  imgui.igPushStyleColor_U32(ImGuiCol_FrameBg, 0);
+  imgui.igPushStyleVar_Float(ImGuiStyleVar_FrameBorderSize, 0);
 
-    auto wpos = button_t::wpos = imgui.igGetWindowPos ();
-    auto wsz  = button_t::wsz  = imgui.igGetWindowSize ();
+  imgui.igGetWindowPos(&button_t::wpos);
+  imgui.igGetWindowSize(&button_t::wsz);
+  auto wpos = button_t::wpos;
+  auto wsz = button_t::wsz;
 
-    imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), journal.background,
-            wpos, ImVec2 {wpos.x+wsz.x, wpos.y+wsz.y}, ImVec2 {0,0}, ImVec2 {1,.7226f},
-            IM_COL32_WHITE);
+  imgui.ImDrawList_AddImage(imgui.igGetWindowDrawList(), journal.background,
+                            wpos, ImVec2{wpos.x + wsz.x, wpos.y + wsz.y},
+                            ImVec2{0, 0}, ImVec2{1, .7226f}, IM_COL32_WHITE);
 
-    // Ratio, ratio multiplied by pixel size and the absolute positions summed with these
-    // are used all below. It may be pulled off as more capsulated and less dublication.
-    const float text_width    = .412f * wsz.x;
-    const float text_height   = .800f * wsz.y;
+  // Ratio, ratio multiplied by pixel size and the absolute positions summed
+  // with these are used all below. It may be pulled off as more capsulated and
+  // less dublication.
+  const float text_width = .412f * wsz.x;
+  const float text_height = .800f * wsz.y;
 
-    const float left_page  = .070f * wsz.x;
-    const float right_page = .528f * wsz.x;
-    const float title_top  = .090f * wsz.y;
-    const float text_top   = .159f * wsz.y;
+  const float left_page = .070f * wsz.x;
+  const float right_page = .528f * wsz.x;
+  const float title_top = .090f * wsz.y;
+  const float text_top = .159f * wsz.y;
 
-    // Port/larboard/ladebord
-    // Starboard/steobord
+  // Port/larboard/ladebord
+  // Starboard/steobord
 
-    if (journal.button_settings.draw ())
-        journal.show_settings = !journal.show_settings;
-    if (journal.button_elements.draw ())
-        journal.show_elements = !journal.show_elements;
-    if (journal.button_chapters.draw ())
-        journal.show_chapters = !journal.show_chapters;
-    if (journal.button_saveas.draw ())
-        journal.show_saveas = !journal.show_saveas;
-    if (journal.button_load.draw ())
-        journal.show_load = !journal.show_load;
+  if (journal.button_settings.draw())
+    journal.show_settings = !journal.show_settings;
+  if (journal.button_elements.draw())
+    journal.show_elements = !journal.show_elements;
+  if (journal.button_chapters.draw())
+    journal.show_chapters = !journal.show_chapters;
+  if (journal.button_saveas.draw())
+    journal.show_saveas = !journal.show_saveas;
+  if (journal.button_load.draw())
+    journal.show_load = !journal.show_load;
 
-    bool action_ok = true;
-    if (journal.button_save.draw ())
-        action_ok = save_book (default_book);
-    popup_error (!action_ok, "Saving book failed");
+  bool action_ok = true;
+  if (journal.button_save.draw())
+    action_ok = save_book(default_book);
+  popup_error(!action_ok, "Saving book failed");
 
-    extern void previous_page ();
-    if (journal.button_prev.draw ())
-        previous_page ();
-    extern void next_page ();
-    if (journal.button_next.draw ())
-        next_page ();
+  extern void previous_page();
+  if (journal.button_prev.draw())
+    previous_page();
+  extern void next_page();
+  if (journal.button_next.draw())
+    next_page();
 
-    imgui.igPushFont (journal.chapter_font.imfont);
-    imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.chapter_font.color);
+  imgui.igPushFont(journal.chapter_font.imfont);
+  imgui.igPushStyleColor_U32(ImGuiCol_Text, journal.chapter_font.color);
 
-    imgui.igSetNextItemWidth (text_width);
-    imgui.igSetCursorPos (ImVec2 { left_page, title_top });
-    imgui_input_text ("##Left title", journal.pages[journal.current_page].title);
-    if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
-        imgui.ImDrawList_AddRect (imgui.igGetWindowDrawList (),
-                ImVec2 { wpos.x+left_page, wpos.y+title_top },
-                ImVec2 { wpos.x+left_page+text_width, wpos.y+title_top+imgui.igGetFrameHeight () },
-                frame_col, 0, ImDrawCornerFlags_All, 2.f);
+  imgui.igSetNextItemWidth(text_width);
+  imgui.igSetCursorPos(ImVec2{left_page, title_top});
+  imgui_input_text("##Left title", journal.pages[journal.current_page].title);
+  if (imgui.igIsItemHovered(0) && !imgui.igIsItemActive())
+    imgui.ImDrawList_AddRect(
+        imgui.igGetWindowDrawList(),
+        ImVec2{wpos.x + left_page, wpos.y + title_top},
+        ImVec2{wpos.x + left_page + text_width,
+               wpos.y + title_top + imgui.igGetFrameHeight()},
+        frame_col, 0, ImDrawFlags_RoundCornersAll, 2.f);
 
-    imgui.igSetCursorPos (ImVec2 { right_page, title_top });
-    imgui.igSetNextItemWidth (text_width);
-    imgui_input_text ("##Right title", journal.pages[journal.current_page+1].title);
-    if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
-        imgui.ImDrawList_AddRect (imgui.igGetWindowDrawList (),
-                ImVec2 { wpos.x+right_page, wpos.y+title_top },
-                ImVec2 { wpos.x+right_page+text_width, wpos.y+title_top+imgui.igGetFrameHeight () },
-                frame_col, 0, ImDrawCornerFlags_All, 2.f);
+  imgui.igSetCursorPos(ImVec2{right_page, title_top});
+  imgui.igSetNextItemWidth(text_width);
+  imgui_input_text("##Right title",
+                   journal.pages[journal.current_page + 1].title);
+  if (imgui.igIsItemHovered(0) && !imgui.igIsItemActive())
+    imgui.ImDrawList_AddRect(
+        imgui.igGetWindowDrawList(),
+        ImVec2{wpos.x + right_page, wpos.y + title_top},
+        ImVec2{wpos.x + right_page + text_width,
+               wpos.y + title_top + imgui.igGetFrameHeight()},
+        frame_col, 0, ImDrawFlags_RoundCornersAll, 2.f);
 
-    imgui.igPopFont ();
-    imgui.igPopStyleColor (1);
-    imgui.igPushFont (journal.text_font.imfont);
-    imgui.igPushStyleColorU32 (ImGuiCol_Text, journal.text_font.color);
-    // Awkward, but there is no sane way to disable it
-    imgui.igPushStyleColorU32 (ImGuiCol_ScrollbarBg, IM_COL32_BLACK_TRANS);
-    imgui.igPushStyleColorU32 (ImGuiCol_ScrollbarGrab, IM_COL32_BLACK_TRANS);
-    imgui.igPushStyleColorU32 (ImGuiCol_ScrollbarGrabHovered, IM_COL32_BLACK_TRANS);
-    imgui.igPushStyleColorU32 (ImGuiCol_ScrollbarGrabActive, IM_COL32_BLACK_TRANS);
+  imgui.igPopFont();
+  imgui.igPopStyleColor(1);
+  imgui.igPushFont(journal.text_font.imfont);
+  imgui.igPushStyleColor_U32(ImGuiCol_Text, journal.text_font.color);
+  // Awkward, but there is no sane way to disable it
+  imgui.igPushStyleColor_U32(ImGuiCol_ScrollbarBg, IM_COL32_BLACK_TRANS);
+  imgui.igPushStyleColor_U32(ImGuiCol_ScrollbarGrab, IM_COL32_BLACK_TRANS);
+  imgui.igPushStyleColor_U32(ImGuiCol_ScrollbarGrabHovered,
+                             IM_COL32_BLACK_TRANS);
+  imgui.igPushStyleColor_U32(ImGuiCol_ScrollbarGrabActive,
+                             IM_COL32_BLACK_TRANS);
 
-    auto& left_image = journal.pages[journal.current_page].image;
-    if (left_image.ref)
-    {
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), left_image.ref,
-            ImVec2 { wpos.x + left_page + text_width * left_image.xy[0],
-                     wpos.y + text_top + text_height * left_image.xy[1]},
-            ImVec2 { wpos.x + left_page + text_width * left_image.xy[2],
-                     wpos.y + text_top + text_height * left_image.xy[3] },
-            ImVec2 { left_image.uv[0], left_image.uv[1] },
-            ImVec2 { left_image.uv[2], left_image.uv[3] },
-            left_image.tint);
-    }
-    if (!left_image.ref || left_image.background)
-    {
-        imgui.igSetCursorPos (ImVec2 { left_page, text_top });
-        imgui_input_multiline ("##Left text",
-                journal.pages[journal.current_page].content, ImVec2 { text_width, text_height });
-        if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
-            imgui.ImDrawList_AddRect (imgui.igGetWindowDrawList (),
-                    ImVec2 { wpos.x+left_page, wpos.y+text_top },
-                    ImVec2 { wpos.x+left_page+text_width, wpos.y+text_top+text_height },
-                    frame_col, 0, ImDrawCornerFlags_All, 2.f);
-    }
+  auto &left_image = journal.pages[journal.current_page].image;
+  if (left_image.ref) {
+    imgui.ImDrawList_AddImage(
+        imgui.igGetWindowDrawList(), left_image.ref,
+        ImVec2{wpos.x + left_page + text_width * left_image.xy[0],
+               wpos.y + text_top + text_height * left_image.xy[1]},
+        ImVec2{wpos.x + left_page + text_width * left_image.xy[2],
+               wpos.y + text_top + text_height * left_image.xy[3]},
+        ImVec2{left_image.uv[0], left_image.uv[1]},
+        ImVec2{left_image.uv[2], left_image.uv[3]}, left_image.tint);
+  }
+  if (!left_image.ref || left_image.background) {
+    imgui.igSetCursorPos(ImVec2{left_page, text_top});
+    imgui_input_multiline("##Left text",
+                          journal.pages[journal.current_page].content,
+                          ImVec2{text_width, text_height});
+    if (imgui.igIsItemHovered(0) && !imgui.igIsItemActive())
+      imgui.ImDrawList_AddRect(imgui.igGetWindowDrawList(),
+                               ImVec2{wpos.x + left_page, wpos.y + text_top},
+                               ImVec2{wpos.x + left_page + text_width,
+                                      wpos.y + text_top + text_height},
+                               frame_col, 0, ImDrawFlags_RoundCornersAll, 2.f);
+  }
 
-    auto& right_image = journal.pages[journal.current_page+1].image;
-    if (right_image.ref)
-    {
-        imgui.ImDrawList_AddImage (imgui.igGetWindowDrawList (), right_image.ref,
-            ImVec2 { wpos.x + right_page + text_width * right_image.xy[0],
-                     wpos.y + text_top + text_height * right_image.xy[1]},
-            ImVec2 { wpos.x + right_page + text_width * right_image.xy[2],
-                     wpos.y + text_top + text_height * right_image.xy[3] },
-            ImVec2 { right_image.uv[0], right_image.uv[1] },
-            ImVec2 { right_image.uv[2], right_image.uv[3] },
-            right_image.tint);
-    }
-    if (!right_image.ref || right_image.background)
-    {
-        imgui.igSetCursorPos (ImVec2 { right_page, text_top });
-        imgui_input_multiline ("##Right text",
-                journal.pages[journal.current_page+1].content, ImVec2 { text_width, text_height });
-        if (imgui.igIsItemHovered (0) && !imgui.igIsItemActive ())
-            imgui.ImDrawList_AddRect (imgui.igGetWindowDrawList (),
-                    ImVec2 { wpos.x+right_page, wpos.y+text_top },
-                    ImVec2 { wpos.x+right_page+text_width, wpos.y+text_top+text_height },
-                    frame_col, 0, ImDrawCornerFlags_All, 2.f);
-    }
+  auto &right_image = journal.pages[journal.current_page + 1].image;
+  if (right_image.ref) {
+    imgui.ImDrawList_AddImage(
+        imgui.igGetWindowDrawList(), right_image.ref,
+        ImVec2{wpos.x + right_page + text_width * right_image.xy[0],
+               wpos.y + text_top + text_height * right_image.xy[1]},
+        ImVec2{wpos.x + right_page + text_width * right_image.xy[2],
+               wpos.y + text_top + text_height * right_image.xy[3]},
+        ImVec2{right_image.uv[0], right_image.uv[1]},
+        ImVec2{right_image.uv[2], right_image.uv[3]}, right_image.tint);
+  }
+  if (!right_image.ref || right_image.background) {
+    imgui.igSetCursorPos(ImVec2{right_page, text_top});
+    imgui_input_multiline("##Right text",
+                          journal.pages[journal.current_page + 1].content,
+                          ImVec2{text_width, text_height});
+    if (imgui.igIsItemHovered(0) && !imgui.igIsItemActive())
+      imgui.ImDrawList_AddRect(imgui.igGetWindowDrawList(),
+                               ImVec2{wpos.x + right_page, wpos.y + text_top},
+                               ImVec2{wpos.x + right_page + text_width,
+                                      wpos.y + text_top + text_height},
+                               frame_col, 0, ImDrawFlags_RoundCornersAll, 2.f);
+  }
 
-    imgui.igPopFont ();
-    imgui.igPopStyleColor (5);
-    imgui.igPopStyleVar (1);
-    imgui.igPopStyleColor (1);
+  imgui.igPopFont();
+  imgui.igPopStyleColor(5);
+  imgui.igPopStyleVar(1);
+  imgui.igPopStyleColor(1);
 }
 
 //--------------------------------------------------------------------------------------------------
 
-static std::string greedy_word_wrap (std::string const& source, unsigned width);
+static std::string greedy_word_wrap(std::string const &source, unsigned width);
 
 void
 draw_settings ()
@@ -419,26 +421,27 @@ draw_settings ()
     imgui.igPushFont (journal.default_font.imfont);
     if (imgui.igBegin ("SSE Journal: Settings", &journal.show_settings, 0))
     {
-        static ImVec4 button_c  = imgui.igColorConvertU32ToFloat4 (journal.button_font.color),
-                      chapter_c = imgui.igColorConvertU32ToFloat4 (journal.chapter_font.color),
-                      text_c    = imgui.igColorConvertU32ToFloat4 (journal.text_font.color);
+        static ImVec4 button_c  = igColorConvertU32ToFloat4 (journal.button_font.color),
+                      chapter_c = igColorConvertU32ToFloat4 (journal.chapter_font.color),
+                      text_c    = igColorConvertU32ToFloat4 (journal.text_font.color);
+
         constexpr int cflags = ImGuiColorEditFlags_Float | ImGuiColorEditFlags_DisplayHSV
             | ImGuiColorEditFlags_InputRGB | ImGuiColorEditFlags_PickerHueBar
             | ImGuiColorEditFlags_AlphaBar;
 
         imgui.igText ("Buttons font:");
         if (imgui.igColorEdit4 ("Color##Buttons", (float*) &button_c, cflags))
-            journal.button_font.color = imgui.igGetColorU32Vec4 (button_c);
+            journal.button_font.color = imgui.igGetColorU32_Vec4 (button_c);
         imgui.igSliderFloat ("Scale##Buttons", &journal.button_font.imfont->Scale,.5f,2.f,"%.2f",1);
 
         imgui.igText ("Titles font:");
         if (imgui.igColorEdit4 ("Color##Titles", (float*) &chapter_c, cflags))
-            journal.chapter_font.color = imgui.igGetColorU32Vec4 (chapter_c);
+            journal.chapter_font.color = imgui.igGetColorU32_Vec4 (chapter_c);
         imgui.igSliderFloat ("Scale##Titles", &journal.chapter_font.imfont->Scale,.5f,2.f,"%.2f",1);
 
         imgui.igText ("Text font:");
         if (imgui.igColorEdit4 ("Color##Text", (float*) &text_c, cflags))
-            journal.text_font.color = imgui.igGetColorU32Vec4 (text_c);
+            journal.text_font.color = imgui.igGetColorU32_Vec4 (text_c);
         imgui.igSliderFloat ("Scale##Text", &journal.text_font.imfont->Scale, .5f, 2.f, "%.2f", 1);
 
         imgui.igText ("Default font:");
@@ -447,7 +450,7 @@ draw_settings ()
         static int wrap_width = 60;
         imgui.igDummy (ImVec2 { 1, imgui.igGetFrameHeight () });
         imgui.igText ("Word wrap:");
-        imgui.igDragInt ("Line width", &wrap_width, 1, 40, 160, "%d");
+        imgui.igDragInt ("Line width", &wrap_width, 1, 40, 160, "%d", 0);
         if (imgui.igButton ("Wrap", ImVec2 {}))
         {
             for (auto& p: journal.pages)
@@ -516,7 +519,7 @@ draw_variables ()
         output = v ();
     }
     imgui_input_text ("##Output", output);
-    if (imgui.igListBoxFnPtr ("##Variables", &varsel, extract_variable_text,
+    if (imgui.igListBox_FnBoolPtr ("##Variables", &varsel, extract_variable_text,
             &journal.variables, static_cast<int> (journal.variables.size ()), items))
     {
         if (varsel >= 0)
@@ -548,11 +551,11 @@ draw_variables ()
         if (varsel >= 0)
         {
             newvar_name = "(enter your name here)";
-            imgui.igOpenPopup (newvar_popup);
+            imgui.igOpenPopup_Str (newvar_popup, 0);
         }
     if (imgui.igButton ("Delete", ImVec2 {-1, 0}))
         if (varsel >= 0 && journal.variables[varsel].deletable)
-            imgui.igOpenPopup ("Delete variable?");
+            imgui.igOpenPopup_Str ("Delete variable?", 0);
     if (imgui.igBeginPopup ("Delete variable?", 0))
     {
         if (imgui.igButton ("Are you sure?##Variable", ImVec2 {}))
@@ -568,8 +571,8 @@ draw_variables ()
         if (varsel >= 0)
         {
             info_text = journal.variables[varsel].info;
-            info_size = imgui.igCalcTextSize (info_text.c_str (), nullptr, false, -1.f);
-            imgui.igOpenPopup (info_popup);
+            imgui.igCalcTextSize (&info_size, info_text.c_str (), nullptr, false, -1.f);
+            imgui.igOpenPopup_Str (info_popup, 0);
         }
     imgui.igDummy (ImVec2 {-1, imgui.igGetTextLineHeight () });
     if (imgui.igButton ("Save", ImVec2 {-1, 0}))
@@ -734,11 +737,13 @@ draw_images ()
     auto& left_image = journal.pages[journal.current_page].image;
     auto& right_image = journal.pages[journal.current_page+1].image;
 
-    float width = imgui.igGetContentRegionAvail ().x;
+    ImVec2 cregavail;
+    imgui.igGetContentRegionAvail (&cregavail);
+    float width = cregavail.x;
     float sidew = width *.3f;
 
     imgui.igSetNextItemWidth (width * .40f);
-    imgui.igListBoxFnPtr ("##Image files", &namesel, extract_vector_string,
+    imgui.igListBox_FnBoolPtr ("##Image files", &namesel, extract_vector_string,
             &names, static_cast<int> (names.size ()), items);
     imgui.igSameLine (0, -1);
     imgui.igPushItemWidth (sidew);
@@ -757,7 +762,7 @@ draw_images ()
     imgui_range_widget ("##Xleft", left_image.xy[0], left_image.xy[2]);
     imgui_range_widget ("##Yleft", left_image.xy[1], left_image.xy[3]);
     imgui.igCheckbox ("Background##left", &left_image.background);
-    left_tint = imgui.igColorConvertU32ToFloat4 (left_image.tint);
+    left_tint = igColorConvertU32ToFloat4 (left_image.tint);
     imgui.igColorEdit4 ("Tint##left", (float*) &left_tint, color_flags);
     left_image.tint = imgui.igColorConvertFloat4ToU32 (left_tint);
     imgui.igEndGroup ();
@@ -777,7 +782,7 @@ draw_images ()
     imgui_range_widget ("##Xright", right_image.xy[0], right_image.xy[2]);
     imgui_range_widget ("##Yright", right_image.xy[1], right_image.xy[3]);
     imgui.igCheckbox ("Background##right", &right_image.background);
-    right_tint = imgui.igColorConvertU32ToFloat4 (right_image.tint);
+    right_tint = igColorConvertU32ToFloat4 (right_image.tint);
     imgui.igColorEdit4 ("Tint##right", (float*) &right_tint, color_flags);
     right_image.tint = imgui.igColorConvertFloat4ToU32 (right_tint);
     imgui.igEndGroup ();
@@ -845,7 +850,7 @@ draw_chapters ()
     imgui.igPushFont (journal.default_font.imfont);
     if (imgui.igBegin ("SSE Journal: Chapters", &journal.show_chapters, 0))
     {
-        if (imgui.igListBoxFnPtr ("##Chapters", &selection, extract_chapter_title, nullptr,
+        if (imgui.igListBox_FnBoolPtr ("##Chapters", &selection, extract_chapter_title, nullptr,
                 int (journal.pages.size ()), items))
         {
             int ndx = selection;
@@ -872,7 +877,7 @@ draw_chapters ()
         }
         if (imgui.igButton ("Delete", ImVec2 {-1, 0}))
             if (selection >= 0 && selection < int (journal.pages.size ()))
-                imgui.igOpenPopup ("Delete chapter?");
+                imgui.igOpenPopup_Str ("Delete chapter?", 0);
         if (imgui.igBeginPopup ("Delete chapter?", 0))
         {
             if (imgui.igButton ("Are you sure?##Chapter", ImVec2 {}))
@@ -913,7 +918,7 @@ draw_saveas ()
     {
         imgui.igText (books_directory.c_str ());
         imgui_input_text ("Name", name);
-        imgui.igCombo ("Type", &typesel, types.data (), int (types.size ()), -1);
+        imgui.igCombo_Str_arr ("Type", &typesel, types.data (), int (types.size ()), -1);
         if (imgui.igButton ("Cancel", ImVec2 {}))
             journal.show_saveas = false;
         imgui.igSameLine (0, -1);
@@ -955,9 +960,9 @@ draw_load ()
     {
         imgui.igText (books_directory.c_str ());
         imgui.igBeginGroup ();
-        if (imgui.igCombo ("##Type", &typesel, types.data (), int (types.size ()), -1))
+        if (imgui.igCombo_Str_arr ("##Type", &typesel, types.data (), int (types.size ()), -1))
             enumerate_filenames (books_directory + filters[typesel], names);
-        imgui.igListBoxFnPtr ("##Names",
+        imgui.igListBox_FnBoolPtr ("##Names",
                 &namesel, extract_vector_string, &names, int (names.size ()), items);
         imgui.igEndGroup ();
         imgui.igSameLine (0, -1);
